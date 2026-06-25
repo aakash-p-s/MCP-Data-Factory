@@ -163,4 +163,26 @@ python3 -c "import json; print(json.load(open('infra/synthea/demo_patient_aliase
 - [x] **Phase 0** — repo bootstrap, `.env.example`, `requirements.txt`, uv 3.12 venv
 - [x] **Phase 1 (Thu Jun 25)** — 3 data stores up + schemas verified; `connector_base.py` ABC
 - [x] **Phase 2 (Fri Jun 26)** — Synthea loader; vitals=292, labs=6787, diagnoses=732, meds=1071; determinism verified
-- [ ] **Phase 3 (Fri Jun 26)** — Day-1 stub server + handoff to Person B
+- [x] **Phase 3 (Fri Jun 26)** — Day-1 stub server (`vitals_trends`) verified + handed to Person B
+- [ ] **Mon Jun 29** — real `vitals_trends` server: `sql_connector.py`, `tools.py`, `news2.py`
+
+### Day-1 Stub Server (`backend/servers/vitals_trends/`)
+
+MCP server over Streamable HTTP with hardcoded FHIR — unblocks Person B before the real
+DB-backed server (Jun 29). Contract is **fixed** (see `blueprint.yaml`).
+
+```bash
+uv run python backend/servers/vitals_trends/main.py     # -> http://localhost:8001/mcp
+```
+
+| Field | Value |
+| --- | --- |
+| MCP endpoint | `http://localhost:8001/mcp` |
+| Kong route | `/mcp/clinical/vitals-trends/dev` |
+| Tools | `get_vitals_trend`, `compute_news2_score`, `list_abnormal_vitals` |
+| Scope | `mcp.vitals.read` |
+| Success | FHIR R4 `Observation` |
+| Denial | `403 {"error":{"code":"forbidden","reason":"missing scope mcp.vitals.read"}}` |
+
+A bearer token missing the scope gets the 403 envelope; no token is allowed (POC-friendly
+until Keycloak is wired). Signature verification + full RBAC land Jul 2.
