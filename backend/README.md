@@ -119,9 +119,48 @@ docker exec timescaledb-vitals psql -U postgres -d vitals -c "\dt"
 docker exec postgres-clinical psql -U postgres -d clinical -c "\dt"
 ```
 
+## Synthea Data Pipeline
+
+[`infra/synthea/load_patients.py`](../infra/synthea/load_patients.py) generates synthetic
+FHIR R4 patients with a **fixed `SYNTHEA_SEED`** and loads vitals/labs/meds into the stores
+above. The 188 MB jar and the generated `output/` are gitignored (regenerated from the seed).
+
+One-time: download the Synthea jar (~188 MB):
+
+```bash
+curl -sL -o infra/synthea/synthea-with-dependencies.jar \
+  https://github.com/synthetichealth/synthea/releases/download/master-branch-latest/synthea-with-dependencies.jar
+```
+
+Run the loader (data stores must be up; ~2 min — generates + truncates + loads):
+
+```bash
+set -a; . ./.env; set +a                      # export VITALS_DB_URL, CLINICAL_DB_URL, SEED
+uv run python infra/synthea/load_patients.py
+```
+
+The loader truncates first, so re-running with the same `SYNTHEA_SEED` is reproducible —
+`demo-patient-1` maps to the same UUID every time (written to
+[`infra/synthea/demo_patient_aliases.json`](../infra/synthea/demo_patient_aliases.json)).
+
+Clinical notes → Qdrant are **deferred to Jul 6** and skipped by default. To embed them
+(pulls the `all-MiniLM-L6-v2` model, which must match `vector_connector.py`):
+
+```bash
+LOAD_NOTES=true uv run python infra/synthea/load_patients.py
+```
+
+Verify data landed:
+
+```bash
+docker exec timescaledb-vitals psql -U postgres -d vitals   -c "SELECT count(*) FROM vitals;"
+docker exec postgres-clinical  psql -U postgres -d clinical -c "SELECT count(*) FROM labs;"
+python3 -c "import json; print(json.load(open('infra/synthea/demo_patient_aliases.json'))['demo-patient-1'])"
+```
+
 ## Progress
 
 - [x] **Phase 0** — repo bootstrap, `.env.example`, `requirements.txt`, uv 3.12 venv
 - [x] **Phase 1 (Thu Jun 25)** — 3 data stores up + schemas verified; `connector_base.py` ABC
-- [ ] **Phase 2 (Fri Jun 26)** — Synthea loader, populate vitals/labs/meds
+- [x] **Phase 2 (Fri Jun 26)** — Synthea loader; vitals=292, labs=6787, diagnoses=732, meds=1071; determinism verified
 - [ ] **Phase 3 (Fri Jun 26)** — Day-1 stub server + handoff to Person B

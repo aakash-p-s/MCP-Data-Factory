@@ -37,6 +37,10 @@ htmlcov/
 # *.csv
 # *.parquet
 
+# Synthea — large jar + generated FHIR output (regenerated from a fixed seed)
+infra/synthea/synthea-with-dependencies.jar
+infra/synthea/output/
+
 # OS
 .DS_Store
 Thumbs.db
