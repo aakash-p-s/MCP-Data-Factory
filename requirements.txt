@@ -1,0 +1,29 @@
+# Patient Risk Intelligence — Person A (backend/data) deps
+# Python 3.12 (PRD Codebase §8: Python 3.12 or 3.13)
+
+# Web framework + MCP
+fastapi==0.136.*
+mcp>=1.27,<2
+
+# Database drivers
+psycopg[binary]
+asyncpg
+
+# Models / validation
+pydantic>=2
+
+# Vector DB + embeddings (clinical_notes_search)
+qdrant-client
+sentence-transformers
+
+# Auth (JWT re-verification, Layer-2 RBAC)
+pyjwt
+
+# Resilience
+tenacity
+
+# ASGI server to run the FastAPI/MCP apps
+uvicorn[standard]
+
+# Tests
+pytest

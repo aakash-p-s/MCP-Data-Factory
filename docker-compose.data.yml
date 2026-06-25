@@ -1,0 +1,82 @@
+# Person A's half of the infrastructure — the 3 data stores (+ optional pgAdmin).
+# Person B owns docker-compose.platform.yml; merge into one file on Jul 8.
+#
+#   docker compose -f docker-compose.data.yml up -d
+#
+# Schemas in infra/postgres/*.sql run automatically on FIRST container init
+# (empty volume). To re-apply after edits: docker compose -f docker-compose.data.yml
+# down -v  (drops volumes), then up -d again.
+
+services:
+  # --- vitals domain (TimescaleDB = Postgres 16 + timescaledb extension) ---
+  timescaledb-vitals:
+    image: timescale/timescaledb:latest-pg16
+    container_name: timescaledb-vitals
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${TIMESCALE_DB:-vitals}
+      POSTGRES_USER: ${TIMESCALE_USER:-postgres}
+      POSTGRES_PASSWORD: ${TIMESCALE_PASSWORD:-changeme}
+    ports:
+      - "${TIMESCALE_PORT:-5433}:5432"
+    volumes:
+      - timescale_data:/var/lib/postgresql/data
+      - ./infra/postgres/init-timescale-vitals.sql:/docker-entrypoint-initdb.d/01-init-timescale-vitals.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${TIMESCALE_USER:-postgres} -d ${TIMESCALE_DB:-vitals}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # --- labs_diagnoses + medications_interactions (one Postgres 16 instance) ---
+  postgres-clinical:
+    image: postgres:16
+    container_name: postgres-clinical
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${CLINICAL_DB:-clinical}
+      POSTGRES_USER: ${CLINICAL_USER:-postgres}
+      POSTGRES_PASSWORD: ${CLINICAL_PASSWORD:-changeme}
+    ports:
+      - "${CLINICAL_PORT:-5432}:5432"
+    volumes:
+      - clinical_data:/var/lib/postgresql/data
+      - ./infra/postgres/init-labs-diagnoses.sql:/docker-entrypoint-initdb.d/01-init-labs-diagnoses.sql:ro
+      - ./infra/postgres/init-medications.sql:/docker-entrypoint-initdb.d/02-init-medications.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${CLINICAL_USER:-postgres} -d ${CLINICAL_DB:-clinical}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # --- clinical_notes_search (Qdrant vector DB; dashboard at :6333/dashboard) ---
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: qdrant
+    restart: unless-stopped
+    ports:
+      - "6333:6333"   # REST + dashboard
+      - "6334:6334"   # gRPC
+    volumes:
+      - qdrant_data:/qdrant/storage
+
+  # --- optional: browse your own data while building ---
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: pgadmin
+    restart: unless-stopped
+    profiles: ["tools"]   # only starts with: --profile tools
+    environment:
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_EMAIL:-admin@example.com}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD:-changeme}
+      PGADMIN_CONFIG_SERVER_MODE: "False"
+    ports:
+      - "5050:80"
+    depends_on:
+      - timescaledb-vitals
+      - postgres-clinical
+
+volumes:
+  timescale_data:
+  clinical_data:
+  qdrant_data:
