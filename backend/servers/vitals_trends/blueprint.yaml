@@ -1,0 +1,27 @@
+# vitals_trends — MCP server blueprint (human-approval artifact, Codebase PRD §6.2).
+# This is the FIXED contract Person B builds against. Do not change a tool name,
+# scope, or route without telling Person B the same day.
+domain: vitals_trends
+storage: timescaledb            # vitals hypertable
+fhir_resource: Observation      # category: vital-signs
+terminology: LOINC
+scope: mcp.vitals.read
+kong_route: /mcp/clinical/vitals-trends/dev
+mcp_endpoint: /mcp              # direct Streamable HTTP endpoint behind the route
+status: STUB                    # hardcoded data; DB-backed server replaces this Jun 29
+
+tools:
+  - name: get_vitals_trend
+    signature: "(patient_id: str, hours: int = 24) -> list[Observation]"
+    cached: 30s
+  - name: compute_news2_score
+    signature: "(patient_id: str) -> dict"     # NEWS2 score + risk band
+  - name: list_abnormal_vitals
+    signature: "(patient_id: str, hours: int = 24) -> list[Observation]"
+
+rbac:                            # Codebase PRD §6.3
+  clinical-viewer: allow
+  physician: allow
+  case-manager: deny
+
+denial_envelope: '{"error":{"code":"forbidden","reason":"missing scope mcp.vitals.read"}}'
