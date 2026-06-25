@@ -126,20 +126,84 @@ flowchart TB
 
 ---
 
-## Repository Layout
+## Quick Start (Person A — Data & Backend)
+
+Full details in [`backend/README.md`](backend/README.md). The minimal path from clone to
+populated data stores:
+
+```bash
+# --- Phase 0: environment ---------------------------------------------------
+cp .env.example .env                         # then fill in passwords
+uv venv --python 3.12                         # Python 3.12 (PRD §8; not 3.11)
+uv pip install -r requirements.txt
+uv run python -c "import fastapi, mcp, qdrant_client, asyncpg, jwt; print('imports OK')"
+
+# --- Phase 1: data stores + schemas ----------------------------------------
+docker compose -f docker-compose.data.yml up -d        # TimescaleDB, Postgres, Qdrant
+docker compose -f docker-compose.data.yml ps           # all healthy
+docker exec timescaledb-vitals psql -U postgres -d vitals   -c "\dt"   # verify schemas
+docker exec postgres-clinical  psql -U postgres -d clinical -c "\dt"
+
+# --- Phase 2: synthetic data (fixed seed) ----------------------------------
+curl -sL -o infra/synthea/synthea-with-dependencies.jar \
+  https://github.com/synthetichealth/synthea/releases/download/master-branch-latest/synthea-with-dependencies.jar
+set -a; . ./.env; set +a
+uv run python infra/synthea/load_patients.py           # truncates + reseeds (reproducible)
+docker exec timescaledb-vitals psql -U postgres -d vitals -c "SELECT count(*) FROM vitals;"
+```
+
+> Ports: TimescaleDB **5433**, Postgres **5434** (5432 was taken locally), Qdrant **6333**.
+> `clinical_notes_search` (Qdrant) is deferred to Jul 6 — run with `LOAD_NOTES=true` to embed notes.
+
+## Directory Structure (Person A)
+
+`[x]` = built · `[ ]` = planned this sprint.
 
 ```
-infra/postgres/      # vitals / labs / diagnoses / medications schemas
-infra/synthea/       # Synthea loader + demo_patient_aliases.json
-backend/shared/      # Fixed Core: connector ABC, auth, audit, cache, egress guard, ...
-backend/connectors/  # sql_connector.py, vector_connector.py
-backend/servers/     # the 4 MCP servers
-backend/tests/       # RBAC matrix, self-healing
-docker-compose.data.yml      # data stores (Person A's half)
-PRD Docs/                    # full PRDs
+patient-risk-intelligence/
+├── docker-compose.data.yml          [x]  TimescaleDB, Postgres, Qdrant, pgAdmin
+├── requirements.txt / .lock         [x]  pinned deps (Python 3.12)
+├── .env.example                     [x]
+│
+├── infra/
+│   ├── postgres/
+│   │   ├── init-timescale-vitals.sql    [x]  vitals hypertable
+│   │   ├── init-labs-diagnoses.sql      [x]  labs + diagnoses
+│   │   └── init-medications.sql         [x]  medications + interaction_rules
+│   └── synthea/
+│       ├── load_patients.py             [x]  generate + load + (embed notes)
+│       └── demo_patient_aliases.json    [x]  friendly ID -> UUID (determinism)
+│
+├── backend/
+│   ├── shared/                          # Fixed Core (imported by all 4 servers)
+│   │   ├── connector_base.py            [x]  Connector ABC
+│   │   ├── fhir_shape.py                [ ]  rows -> FHIR R4
+│   │   ├── auth.py                      [ ]  JWT verify + RBAC (Layer 2)
+│   │   ├── audit.py                     [ ]  audit + purpose_of_access enum
+│   │   ├── telemetry.py                 [ ]  OpenTelemetry trace propagation
+│   │   ├── tool_trust.py                [ ]  Kong-origin / tool-poisoning guard
+│   │   ├── usage_log.py                 [ ]  per-role usage/denial counters
+│   │   ├── egress_guard.py              [ ]  SSRF / egress lock
+│   │   └── cache.py                     [ ]  30s TTL cache
+│   ├── connectors/
+│   │   ├── sql_connector.py             [ ]  TimescaleDB/Postgres (Jun 29)
+│   │   └── vector_connector.py          [ ]  Qdrant (Jul 6)
+│   ├── servers/
+│   │   ├── vitals_trends/               [ ]  main.py, tools.py, news2.py (Jun 29)
+│   │   ├── labs_diagnoses/              [ ]  (Jun 30)
+│   │   ├── medications_interactions/    [ ]  + interactions.py (Jul 1)
+│   │   └── clinical_notes_search/       [ ]  vector server (Jul 6)
+│   ├── tests/
+│   │   ├── test_rbac_matrix.py          [ ]  3 roles x ~13 tools (Jul 3)
+│   │   └── test_self_healing.py         [ ]  chaos demo (Jul 7)
+│   └── README.md                        [x]  backend setup + run guide
+│
+└── PRD Docs/                            [x]  full PRDs
 ```
 
-Backend/data setup and run instructions live in [`backend/README.md`](backend/README.md).
+> Out of Person A's scope this sprint: `registry-db`, the onboarding/runtime agents, Kong,
+> Keycloak, and the frontend (Person B / full-platform). The unified `docker-compose.yml` is
+> merged with Person B's half on Jul 8.
 
 ## Tech Stack
 
