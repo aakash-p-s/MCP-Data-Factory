@@ -130,7 +130,15 @@ app = ScopeGuard(mcp.streamable_http_app(), REQUIRED_SCOPE)
 
 
 if __name__ == "__main__":
+    from importlib.metadata import PackageNotFoundError, version
+
     import uvicorn
-    print(f"[vitals_trends STUB] MCP endpoint: http://localhost:{PORT}/mcp "
+
+    try:
+        mcp_version = version("mcp")          # the SDK has no module __version__
+    except PackageNotFoundError:
+        mcp_version = "unknown"
+    print(f"[vitals_trends STUB] MCP SDK {mcp_version} "
+          f"| endpoint http://localhost:{PORT}/mcp "
           f"| scope={REQUIRED_SCOPE} | route=/mcp/clinical/vitals-trends/dev")
     uvicorn.run(app, host="0.0.0.0", port=PORT)
