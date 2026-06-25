@@ -150,14 +150,20 @@ curl -sL -o infra/synthea/synthea-with-dependencies.jar \
 set -a; . ./.env; set +a
 uv run python infra/synthea/load_patients.py           # truncates + reseeds (reproducible)
 docker exec timescaledb-vitals psql -U postgres -d vitals -c "SELECT count(*) FROM vitals;"
+
+# --- Phase 3: Day-1 stub server (unblocks Person B) ------------------------
+uv run python backend/servers/vitals_trends/main.py    # -> http://localhost:8001/mcp
+# tools: get_vitals_trend, compute_news2_score, list_abnormal_vitals | scope: mcp.vitals.read
+# Kong route /mcp/clinical/vitals-trends/dev | 403 envelope on missing scope
 ```
 
-> Ports: TimescaleDB **5433**, Postgres **5434** (5432 was taken locally), Qdrant **6333**.
+> Ports: TimescaleDB **5433**, Postgres **5434** (5432 was taken locally), Qdrant **6333**,
+> vitals_trends stub **8001**.
 > `clinical_notes_search` (Qdrant) is deferred to Jul 6 — run with `LOAD_NOTES=true` to embed notes.
 
 ## Directory Structure (Person A)
 
-`[x]` = built · `[ ]` = planned this sprint.
+`[x]` = built · `[~]` = stub/partial · `[ ]` = planned this sprint.
 
 ```
 patient-risk-intelligence/
@@ -189,7 +195,7 @@ patient-risk-intelligence/
 │   │   ├── sql_connector.py             [ ]  TimescaleDB/Postgres (Jun 29)
 │   │   └── vector_connector.py          [ ]  Qdrant (Jul 6)
 │   ├── servers/
-│   │   ├── vitals_trends/               [ ]  main.py, tools.py, news2.py (Jun 29)
+│   │   ├── vitals_trends/               [~]  STUB live (main.py, blueprint.yaml); real server Jun 29
 │   │   ├── labs_diagnoses/              [ ]  (Jun 30)
 │   │   ├── medications_interactions/    [ ]  + interactions.py (Jul 1)
 │   │   └── clinical_notes_search/       [ ]  vector server (Jul 6)
