@@ -187,6 +187,7 @@ patient-risk-intelligence/
 ├── backend/
 │   ├── shared/                          # Fixed Core (imported by all 4 servers)
 │   │   ├── connector_base.py            [x]  Connector ABC
+│   │   ├── embeddings.py                [x]  single-source embedding model + fingerprint guard
 │   │   ├── fhir_shape.py                [ ]  rows -> FHIR R4
 │   │   ├── auth.py                      [ ]  JWT verify + RBAC (Layer 2)
 │   │   ├── audit.py                     [ ]  audit + purpose_of_access enum
@@ -214,6 +215,13 @@ patient-risk-intelligence/
 > Out of Person A's scope this sprint: `registry-db`, the onboarding/runtime agents, Kong,
 > Keycloak, and the frontend (Person B / full-platform). The unified `docker-compose.yml` is
 > merged with Person B's half on Jul 8.
+
+> **Deviation from PRD §5.1.2 (intentional):** the PRD says to pin
+> `all-MiniLM-L6-v2` *inside both* `load_patients.py` and `vector_connector.py`. We instead
+> keep it in **one** module — [`backend/shared/embeddings.py`](backend/shared/embeddings.py) —
+> that both import, so the model name + dimension can never drift. The module also stamps the
+> model into the Qdrant collection and asserts it on startup, turning a silent mismatch into a
+> loud error. Same requirement, stronger guarantee — no contract/tool/scope change.
 
 ## Tech Stack
 

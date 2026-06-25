@@ -144,11 +144,20 @@ The loader truncates first, so re-running with the same `SYNTHEA_SEED` is reprod
 [`infra/synthea/demo_patient_aliases.json`](../infra/synthea/demo_patient_aliases.json)).
 
 Clinical notes → Qdrant are **deferred to Jul 6** and skipped by default. To embed them
-(pulls the `all-MiniLM-L6-v2` model, which must match `vector_connector.py`):
+(pulls the `all-MiniLM-L6-v2` model on first run, ~80 MB, downloads automatically):
 
 ```bash
-LOAD_NOTES=true uv run python infra/synthea/load_patients.py
+LOAD_NOTES=true uv run python infra/synthea/load_patients.py     # macOS/Linux
+# Windows PowerShell:  $env:LOAD_NOTES="true"; uv run python infra/synthea/load_patients.py
 ```
+
+> **Embedding model — single source of truth.** The model name, collection, and dimension
+> live in [`backend/shared/embeddings.py`](shared/embeddings.py), imported by *both* the
+> loader and (Jul 6) `vector_connector.py`. This implements PRD §5.1.2's "loader and query
+> must match" by making drift impossible rather than relying on two copies staying equal.
+> `ensure_collection()` stamps the model into the Qdrant collection; `assert_model_matches()`
+> raises loudly if a later query uses a different model. Notes need Synthea's
+> `--exporter.clinical_note.export` (the loader sets it), which writes `output/notes/*.txt`.
 
 Verify data landed:
 

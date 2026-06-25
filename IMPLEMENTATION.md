@@ -106,7 +106,22 @@ uv run python infra/synthea/load_patients.py
 Verify: `docker exec timescaledb-vitals psql -U postgres -d vitals -c "SELECT count(*) FROM vitals;"`.
 
 Same `SYNTHEA_SEED=42` → same patients → `demo_patient_aliases.json` resolves to the same
-UUIDs across machines. Clinical notes → Qdrant are deferred to Jul 6 (`LOAD_NOTES=true` to run).
+UUIDs across machines.
+
+### (Optional) Clinical notes → Qdrant
+
+Deferred to Jul 6 and skipped by default. To embed them (downloads the `all-MiniLM-L6-v2`
+model automatically, ~80 MB):
+
+```bash
+LOAD_NOTES=true uv run python infra/synthea/load_patients.py            # macOS / Linux
+```
+```powershell
+$env:LOAD_NOTES="true"; uv run python infra/synthea/load_patients.py    # Windows
+```
+> The embedding model is defined once in [`backend/shared/embeddings.py`](backend/shared/embeddings.py)
+> (imported by both the loader and the future `vector_connector.py`), so the load-time and
+> query-time models can never drift. Nothing to configure — it travels with the repo.
 
 ## 6. Stub server (`vitals_trends`)
 
