@@ -35,7 +35,8 @@ SEED = int(os.getenv("SYNTHEA_SEED", "42"))
 PATIENT_COUNT = int(os.getenv("SYNTHEA_PATIENT_COUNT", "20"))
 VITALS_DB_URL = os.environ["VITALS_DB_URL"]
 CLINICAL_DB_URL = os.environ["CLINICAL_DB_URL"]
-EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "sentence-transformers/all-MiniLM-L6-v2")
+# EMBEDDING_MODEL lives in backend/shared/embeddings.py (single source of truth) —
+# imported lazily in embed_and_load_notes() so the model name can never drift.
 QDRANT_URL = os.getenv("QDRANT_URL", "http://localhost:6333")
 LOAD_NOTES = os.getenv("LOAD_NOTES", "false").lower() in ("1", "true", "yes")
 
@@ -75,6 +76,7 @@ def run_synthea(patient_count: int = PATIENT_COUNT, seed: int = SEED) -> Path:
         "-cs", str(seed),                      # clinician seed (determinism)
         "--exporter.baseDirectory", str(OUTPUT_DIR),
         "--exporter.fhir.export", "true",
+        "--exporter.clinical_note.export", "true",   # generate note text (default off)
         "--exporter.fhir.use_us_core_ig", "false",
         "--exporter.hospital.fhir.export", "false",
         "--exporter.practitioner.fhir.export", "false",
@@ -258,54 +260,66 @@ def load_medications(entries: list[dict], patient_id: str,
 
 # --- 5. notes -> Qdrant (deferred to Jul 6 unless LOAD_NOTES=true) -----------
 def embed_and_load_notes(fhir_dir: Path) -> int:
-    """Extract DocumentReference narrative text, embed, upsert into Qdrant.
+    """Read Synthea consultation notes, embed, upsert into Qdrant.
 
-    Tags every note physician_note/physician by default (Synthea writes notes from
-    the encounter provider's perspective). MUST embed with the SAME model the
-    vector_connector queries with (EMBEDDING_MODEL) or similarity is meaningless.
+    Notes are exported (with --exporter.clinical_note.export) as one .txt per patient
+    under output/notes/, named <...>_<patient_uuid>.txt — the trailing UUID matches the
+    patient_id stored in the SQL tables. Each file holds one or more encounter notes,
+    delimited by a bare date line; we split on that so each encounter is its own note.
+
+    Tagged physician_note/physician by default (notes are written from the provider's
+    perspective). Model + collection come from backend/shared/embeddings.py — the SAME
+    source the vector connector imports — so loader and query can never drift, and
+    ensure_collection() stamps the model so a mismatch is caught loudly.
     """
-    import base64
+    import re
+    import sys
 
+    # repo root on sys.path so `backend.shared` imports when run as a script
+    sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
     from qdrant_client import QdrantClient
-    from qdrant_client.models import Distance, PointStruct, VectorParams
-    from sentence_transformers import SentenceTransformer
+    from qdrant_client.models import PointStruct
 
-    model = SentenceTransformer(EMBEDDING_MODEL)
-    dim = model.get_sentence_embedding_dimension()
+    from backend.shared.embeddings import COLLECTION, embed, ensure_collection
+
+    notes_dir = fhir_dir.parent / "notes"
+    if not notes_dir.is_dir():
+        print(f"[notes] no notes dir at {notes_dir} — run with clinical_note export enabled")
+        return 0
+
     client = QdrantClient(url=QDRANT_URL)
-    client.recreate_collection(
-        "clinical_notes",
-        vectors_config=VectorParams(size=dim, distance=Distance.COSINE),
-    )
+    ensure_collection(client)   # (re)create collection + stamp embedding fingerprint
 
+    date_re = re.compile(r"^(\d{4}-\d{2}-\d{2})\s*$", re.MULTILINE)
     points: list[PointStruct] = []
-    pid_counter = 0
-    for patient_id, entries in iter_bundles(fhir_dir):
-        for r in entries:
-            if r.get("resourceType") != "DocumentReference":
+    point_id = 1                # id 0 is reserved for the fingerprint meta point
+    for nf in sorted(notes_dir.glob("*.txt")):
+        patient_id = nf.stem.split("_")[-1]          # trailing UUID == Patient.id
+        content = nf.read_text(errors="ignore")
+        # split into per-encounter notes on bare date-header lines
+        marks = list(date_re.finditer(content))
+        chunks = ([(m.group(1), content[m.start():(marks[i + 1].start() if i + 1 < len(marks) else len(content))])
+                   for i, m in enumerate(marks)] or [(None, content)])
+        for note_date, text in chunks:
+            text = text.strip()
+            if not text:
                 continue
-            for content in r.get("content", []):
-                data = content.get("attachment", {}).get("data")
-                if not data:
-                    continue
-                text = base64.b64decode(data).decode("utf-8", errors="ignore")
-                vec = model.encode(text).tolist()
-                points.append(PointStruct(
-                    id=pid_counter,
-                    vector=vec,
-                    payload={
-                        "patient_id": patient_id,
-                        "note_date": r.get("date"),
-                        "author": "physician",
-                        "note_type": "physician_note",
-                        "author_role": "physician",
-                        "text": text[:2000],
-                    },
-                ))
-                pid_counter += 1
+            points.append(PointStruct(
+                id=point_id,
+                vector=embed(text),
+                payload={
+                    "patient_id": patient_id,
+                    "note_date": note_date,
+                    "author": "physician",
+                    "note_type": "physician_note",
+                    "author_role": "physician",
+                    "text": text[:2000],
+                },
+            ))
+            point_id += 1
     if points:
-        client.upsert("clinical_notes", points=points)
-    print(f"[notes] embedded + upserted {len(points)} notes into Qdrant")
+        client.upsert(COLLECTION, points=points)
+    print(f"[notes] embedded + upserted {len(points)} notes into Qdrant ({COLLECTION})")
     return len(points)
 
 
