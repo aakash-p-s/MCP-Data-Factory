@@ -140,5 +140,6 @@ if __name__ == "__main__":
         mcp_version = "unknown"
     print(f"[vitals_trends STUB] MCP SDK {mcp_version} "
           f"| endpoint http://localhost:{PORT}/mcp "
-          f"| scope={REQUIRED_SCOPE} | route=/mcp/clinical/vitals-trends/dev")
+          f"| scope={REQUIRED_SCOPE} | route=/mcp/clinical/vitals-trends/dev",
+          flush=True)   # flush so the banner shows in redirected/Docker logs
     uvicorn.run(app, host="0.0.0.0", port=PORT)
