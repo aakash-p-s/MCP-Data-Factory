@@ -1,0 +1,48 @@
+# Environment & secrets
+.env
+.env.*
+!.env.example
+
+# Confidential PRD PDFs already live on the repo under "PRD Docs/" —
+# don't commit these local root duplicates.
+/Patient_Risk_Complete_Codebase_PRD-2.pdf
+/Patient_Risk_Intelligence_PRD-1.pdf
+/Person_A_Backend_PRD-1.pdf
+/Person_B_Platform_Agent_PRD-1.pdf
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+venv/
+env/
+*.egg-info/
+.eggs/
+dist/
+build/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Data & outputs (uncomment if you don't want to track large files)
+# data/
+# *.csv
+# *.parquet
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
