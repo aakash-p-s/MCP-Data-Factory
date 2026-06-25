@@ -128,8 +128,12 @@ flowchart TB
 
 ## Quick Start (Person A — Data & Backend)
 
-Full details in [`backend/README.md`](backend/README.md). The minimal path from clone to
-populated data stores:
+> **Setting up on a fresh machine (macOS/Linux or Windows)?** Follow
+> **[`IMPLEMENTATION.md`](IMPLEMENTATION.md)** — the full clone-to-running guide with
+> prerequisites, the `person-a/phase-2` branch checkout, and OS-specific commands.
+
+The minimal path from clone to populated data stores (details in
+[`backend/README.md`](backend/README.md)):
 
 ```bash
 # --- Phase 0: environment ---------------------------------------------------
