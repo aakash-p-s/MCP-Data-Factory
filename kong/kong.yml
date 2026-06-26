@@ -1,0 +1,111 @@
+_format_version: "3.0"
+_transform: true
+
+services:
+
+  - name: vitals-trends-service
+    url: http://host.docker.internal:8001
+    routes:
+      - name: vitals-trends-route
+        paths:
+          - /mcp/clinical/vitals-trends/dev
+        strip_path: false
+    plugins:
+      - name: jwt
+        config:
+          uri_param_names: []
+          cookie_names: []
+          key_claim_name: iss
+          secret_is_base64: false
+      - name: rate-limiting
+        config:
+          minute: 60
+          policy: local
+          fault_tolerant: true
+          hide_client_headers: false
+
+  - name: labs-diagnoses-service
+    url: http://labs-diagnoses:8002
+    routes:
+      - name: labs-diagnoses-route
+        paths:
+          - /mcp/clinical/labs-diagnoses/dev
+        strip_path: false
+    plugins:
+      - name: jwt
+        config:
+          uri_param_names: []
+          cookie_names: []
+          key_claim_name: iss
+          secret_is_base64: false
+      - name: rate-limiting
+        config:
+          minute: 60
+          policy: local
+          fault_tolerant: true
+          hide_client_headers: false
+
+  - name: medications-interactions-service
+    url: http://medications-interactions:8003
+    routes:
+      - name: medications-interactions-route
+        paths:
+          - /mcp/clinical/medications-interactions/dev
+        strip_path: false
+    plugins:
+      - name: jwt
+        config:
+          uri_param_names: []
+          cookie_names: []
+          key_claim_name: iss
+          secret_is_base64: false
+      - name: rate-limiting
+        config:
+          minute: 30
+          policy: local
+          fault_tolerant: true
+          hide_client_headers: false
+
+  - name: clinical-notes-search-service
+    url: http://clinical-notes-search:8004
+    routes:
+      - name: clinical-notes-search-route
+        paths:
+          - /mcp/clinical/clinical-notes-search/dev
+        strip_path: false
+    plugins:
+      - name: jwt
+        config:
+          uri_param_names: []
+          cookie_names: []
+          key_claim_name: iss
+          secret_is_base64: false
+      - name: rate-limiting
+        config:
+          minute: 30
+          policy: local
+          fault_tolerant: true
+          hide_client_headers: false
+
+plugins:
+  - name: opentelemetry
+    config:
+      endpoint: http://jaeger:4317
+      resource_attributes:
+        service.name: kong-gateway
+
+consumers:
+  - username: runtime-agent
+    jwt_secrets:
+      - key: http://localhost:8080/realms/patient-risk
+        algorithm: RS256
+        rsa_public_key: |
+          -----BEGIN PUBLIC KEY-----
+          MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA1cd/rAAoidZqPjgOpl0R
+          F3uBLxm2h5lsNZhIgqgrv/2gTsvpRLfkeZTyJV7+jgyZtjVEUEviLFWzDyfvXBKO
+          F0gdFNFSht1tU8HDwMtbVHddRF1KDnChP1JaSVmZ2FnvA8O1sCkfzF/YDfDXKgME
+          bCOCwHm5DmH36NjHSp8MoDfRN0QfwqvLmvYnthxPh62ckLybYtCBB4WqCLvoNczg
+          qBARpzf3Goz8Kmt+FizmxSu7vIG37OHKwCzPMZDmdBv2lHfdepUEcWUaUCD7IqK2
+          ExIL6hEWbpfdH0mLu7XXJXLK0fFdxVBgXZT26dhHMvw0eL4s22bWi23AUYwboAzX
+          HwIDAQAB
+          -----END PUBLIC KEY-----
