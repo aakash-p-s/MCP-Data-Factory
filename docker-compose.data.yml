@@ -38,7 +38,7 @@ services:
       POSTGRES_USER: ${CLINICAL_USER:-postgres}
       POSTGRES_PASSWORD: ${CLINICAL_PASSWORD:-changeme}
     ports:
-      - "${CLINICAL_PORT:-5432}:5432"
+      - "${CLINICAL_PORT:-5436}:5432"
     volumes:
       - clinical_data:/var/lib/postgresql/data
       - ./infra/postgres/init-labs-diagnoses.sql:/docker-entrypoint-initdb.d/01-init-labs-diagnoses.sql:ro
