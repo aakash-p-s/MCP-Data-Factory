@@ -166,6 +166,7 @@ docker exec timescaledb-vitals psql -U postgres -d vitals -c "SELECT count(*) FR
 uv run python backend/servers/vitals_trends/main.py    # -> http://localhost:8001/mcp
 # tools: get_vitals_trend, compute_news2_score, list_abnormal_vitals | scope: mcp.vitals.read
 # Kong route /mcp/clinical/vitals-trends/dev | 403 envelope on missing scope
+# Person B integration checklist: HANDOVER_PERSON_B.md
 ```
 
 > Ports: TimescaleDB **5433**, Postgres **5434** (5432 was taken locally), Qdrant **6333**,
