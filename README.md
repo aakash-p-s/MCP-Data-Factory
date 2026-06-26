@@ -155,6 +155,13 @@ set -a; . ./.env; set +a
 uv run python infra/synthea/load_patients.py           # truncates + reseeds (reproducible)
 docker exec timescaledb-vitals psql -U postgres -d vitals -c "SELECT count(*) FROM vitals;"
 
+# --- Phase 2b (optional): clinical notes -> Qdrant -------------------------
+# Why early? Populates the 4th data domain now (Qdrant is empty otherwise), lets you
+# browse physician notes in the dashboard, and proves the embedding pipeline before Jul 6.
+# LOAD_NOTES=true uv run python infra/synthea/load_patients.py
+# verify: curl -s http://localhost:6333/collections/clinical_notes
+# browse: http://localhost:6333/dashboard
+
 # --- Phase 3: Day-1 stub server (unblocks Person B) ------------------------
 uv run python backend/servers/vitals_trends/main.py    # -> http://localhost:8001/mcp
 # tools: get_vitals_trend, compute_news2_score, list_abnormal_vitals | scope: mcp.vitals.read
@@ -162,8 +169,30 @@ uv run python backend/servers/vitals_trends/main.py    # -> http://localhost:800
 ```
 
 > Ports: TimescaleDB **5433**, Postgres **5434** (5432 was taken locally), Qdrant **6333**,
-> vitals_trends stub **8001**.
-> `clinical_notes_search` (Qdrant) is deferred to Jul 6 — run with `LOAD_NOTES=true` to embed notes.
+> vitals_trends stub **8001**. **Browse / verify data:** [`DATA_CHECKING.md`](DATA_CHECKING.md)
+> (pgAdmin + Qdrant dashboard + SQL status queries).
+> **Clinical notes:** the `clinical_notes_search` MCP server is deferred to Jul 6, but you
+> can **load physician notes into Qdrant early** with `LOAD_NOTES=true` when running
+> `load_patients.py` (see [`IMPLEMENTATION.md`](IMPLEMENTATION.md) §5). **Why early?**
+> Without it, Qdrant stays empty while SQL has all structured data — early load fills the
+> fourth domain, lets you browse note text in the dashboard, and validates embeddings
+> before the Jul 6 search server. Browse at http://localhost:6333/dashboard.
+
+**Windows — Phase 2b (optional, clinical notes → Qdrant):**
+
+```powershell
+cd c:\Users\Bhavna\Desktop\data_factory
+
+Get-Content .env | Where-Object { $_ -match '^\s*[^#].*=' } | ForEach-Object {
+    $name, $value = $_ -split '=', 2
+    [Environment]::SetEnvironmentVariable($name.Trim(), $value.Trim())
+}
+
+$env:LOAD_NOTES="true"
+uv run python infra/synthea/load_patients.py
+```
+
+Verify: `curl.exe -s http://localhost:6333/collections/clinical_notes`
 
 ## Directory Structure (Person A)
 

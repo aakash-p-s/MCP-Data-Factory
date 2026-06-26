@@ -94,20 +94,63 @@ def list_abnormal_vitals(patient_id: str, hours: int = 24) -> list[dict]:
 
 
 # --- Layer-2 scope guard (ASGI; emits the exact 403 envelope) -----------------
+def _service_info(port: int) -> dict:
+    return {
+        "service": "vitals_trends",
+        "status": "ok",
+        "stub": True,
+        "mcp_endpoint": f"http://localhost:{port}/mcp",
+        "transport": "streamable-http",
+        "scope": REQUIRED_SCOPE,
+        "kong_route": "/mcp/clinical/vitals-trends/dev",
+        "tools": [
+            "get_vitals_trend",
+            "compute_news2_score",
+            "list_abnormal_vitals",
+        ],
+        "client_headers": {
+            "Accept": "application/json, text/event-stream",
+            "Content-Type": "application/json",
+        },
+        "note": "MCP tool calls require an MCP client. Open / or /health for this summary.",
+    }
+
+
+async def _json_response(send, status: int, payload: dict) -> None:
+    body = json.dumps(payload).encode()
+    await send({"type": "http.response.start", "status": status,
+                "headers": [(b"content-type", b"application/json"),
+                            (b"content-length", str(len(body)).encode())]})
+    await send({"type": "http.response.body", "body": body})
+
+
 class ScopeGuard:
     """Pure-ASGI guard so it never buffers MCP's streaming responses.
 
     Stub behavior: a bearer token missing REQUIRED_SCOPE -> 403 envelope.
     No token -> allowed (POC-friendly). Signature verification is added Jul 2.
+    Browser / non-MCP probes to /, /health, or /mcp get a readable JSON summary.
     """
 
-    def __init__(self, app, required_scope: str):
+    def __init__(self, app, required_scope: str, port: int):
         self.app = app
         self.required = required_scope
+        self.port = port
 
     async def __call__(self, scope, receive, send):
         if scope["type"] == "http":
+            path = scope.get("path", "")
             headers = dict(scope.get("headers", []))
+            accept = headers.get(b"accept", b"").decode().lower()
+
+            if path in ("/", "/health"):
+                await _json_response(send, 200, _service_info(self.port))
+                return
+
+            if path == "/mcp" and "text/event-stream" not in accept:
+                await _json_response(send, 200, _service_info(self.port))
+                return
+
             auth = headers.get(b"authorization", b"").decode()
             if auth.lower().startswith("bearer "):
                 try:
@@ -116,17 +159,17 @@ class ScopeGuard:
                     claims = {}
                 scopes = (claims.get("scp") or "").split()
                 if self.required not in scopes:
-                    body = json.dumps({"error": {"code": "forbidden",
-                        "reason": f"missing scope {self.required}"}}).encode()
-                    await send({"type": "http.response.start", "status": 403,
-                                "headers": [(b"content-type", b"application/json"),
-                                            (b"content-length", str(len(body)).encode())]})
-                    await send({"type": "http.response.body", "body": body})
+                    await _json_response(send, 403, {
+                        "error": {
+                            "code": "forbidden",
+                            "reason": f"missing scope {self.required}",
+                        },
+                    })
                     return
         await self.app(scope, receive, send)
 
 
-app = ScopeGuard(mcp.streamable_http_app(), REQUIRED_SCOPE)
+app = ScopeGuard(mcp.streamable_http_app(), REQUIRED_SCOPE, PORT)
 
 
 if __name__ == "__main__":
@@ -139,7 +182,8 @@ if __name__ == "__main__":
     except PackageNotFoundError:
         mcp_version = "unknown"
     print(f"[vitals_trends STUB] MCP SDK {mcp_version} "
-          f"| endpoint http://localhost:{PORT}/mcp "
+          f"| health http://localhost:{PORT}/ "
+          f"| mcp http://localhost:{PORT}/mcp "
           f"| scope={REQUIRED_SCOPE} | route=/mcp/clinical/vitals-trends/dev",
           flush=True)   # flush so the banner shows in redirected/Docker logs
     uvicorn.run(app, host="0.0.0.0", port=PORT)

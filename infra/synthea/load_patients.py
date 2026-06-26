@@ -96,7 +96,7 @@ def iter_bundles(fhir_dir: Path):
         # skip the aggregated hospital/practitioner information bundles
         if path.name.startswith(("hospitalInformation", "practitionerInformation")):
             continue
-        bundle = json.loads(path.read_text())
+        bundle = json.loads(path.read_text(encoding="utf-8"))
         entries = [e.get("resource", {}) for e in bundle.get("entry", [])]
         patient = next((r for r in entries if r.get("resourceType") == "Patient"), None)
         if not patient:
