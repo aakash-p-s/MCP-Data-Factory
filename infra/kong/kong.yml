@@ -117,11 +117,11 @@ consumers:
         algorithm: RS256
         rsa_public_key: |
           -----BEGIN PUBLIC KEY-----
-          MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA1cd/rAAoidZqPjgOpl0R
-          F3uBLxm2h5lsNZhIgqgrv/2gTsvpRLfkeZTyJV7+jgyZtjVEUEviLFWzDyfvXBKO
-          F0gdFNFSht1tU8HDwMtbVHddRF1KDnChP1JaSVmZ2FnvA8O1sCkfzF/YDfDXKgME
-          bCOCwHm5DmH36NjHSp8MoDfRN0QfwqvLmvYnthxPh62ckLybYtCBB4WqCLvoNczg
-          qBARpzf3Goz8Kmt+FizmxSu7vIG37OHKwCzPMZDmdBv2lHfdepUEcWUaUCD7IqK2
-          ExIL6hEWbpfdH0mLu7XXJXLK0fFdxVBgXZT26dhHMvw0eL4s22bWi23AUYwboAzX
-          HwIDAQAB
+          MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAvgTs9Wjq3vEcUBnWODEV
+          8Qhauhasju4bdPymVlqti2KLWKyjk7zog3P6lrG8/W+6UsIcIzR2QOQdammxBaWu
+          C2TDaUvqYKwiYRsYkVhREdblGn9jZXGxppZO1J6HPnClQ+6uRsAvCLumyIa5k5ml
+          AtF5jEwhUPghTOowsPxsCGMG0cgOnX7Xf4InMTchBiTgUDJirdIQEezLXAt/ghoP
+          9sf9GrFKjJWfl1WPDFSltPZWhHiA/xXMHoEBPTSSaEcjtYNmyjxwTUVA9vEm7TX5
+          ardJM0X1oo03zyGx/JBWhqP/NzNl1nhCSa6qa++23l2Nl5n0W3TTC3lTTDN8QLzJ
+          RwIDAQAB
           -----END PUBLIC KEY-----
