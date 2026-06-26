@@ -108,17 +108,67 @@ Verify: `docker exec timescaledb-vitals psql -U postgres -d vitals -c "SELECT co
 Same `SYNTHEA_SEED=42` → same patients → `demo_patient_aliases.json` resolves to the same
 UUIDs across machines.
 
-### (Optional) Clinical notes → Qdrant
+### (Optional) Clinical notes → Qdrant (opt in early)
 
-Deferred to Jul 6 and skipped by default. To embed them (downloads the `all-MiniLM-L6-v2`
-model automatically, ~80 MB):
+The `clinical_notes_search` MCP server is scheduled for **Jul 6**, but you can **load
+the note data into Qdrant now** so the vector store is ready to browse. Skipped by
+default; first run downloads the `all-MiniLM-L6-v2` embedding model (~80 MB).
+
+**Why opt in early?**
+
+- **Complete the data picture locally.** Phases 0–3 populate vitals, labs, diagnoses,
+  and meds in SQL, but Qdrant stays empty unless you enable this step. Early load means
+  all four domains have synthetic data on your machine — not just three.
+- **Inspect notes before the search API exists.** You can open the Qdrant dashboard and
+  read real physician-note payloads (`patient_id`, `note_date`, `text`) tied to the same
+  `demo-patient-*` aliases as the SQL tables — useful for understanding what the Jul 6
+  `clinical_notes_search` server will query.
+- **Prove the embedding pipeline end-to-end.** Confirms Synthea's clinical-note export,
+  `embeddings.py`, and Qdrant upsert all work on your OS (including the model download
+  and the collection fingerprint guard) before you build `vector_connector.py`.
+- **Unblock Jul 6 work.** When the vector connector and MCP server land, the
+  `clinical_notes` collection is already populated — you only wire up query logic, not
+  regenerate embeddings from scratch.
+- **Still optional by default.** Phase 0–3 stays fast without it (~2 min loader vs extra
+  time for model download + ~900 note embeddings). Enable when you care about notes,
+  not because the stub `vitals_trends` server requires them.
+
+**macOS / Linux** — load `.env`, then re-run the loader with notes enabled:
 
 ```bash
-LOAD_NOTES=true uv run python infra/synthea/load_patients.py            # macOS / Linux
+set -a; . ./.env; set +a
+LOAD_NOTES=true uv run python infra/synthea/load_patients.py
+```
+
+**Windows** (PowerShell):
+
+```powershell
+cd c:\Users\Bhavna\Desktop\data_factory
+
+Get-Content .env | Where-Object { $_ -match '^\s*[^#].*=' } | ForEach-Object {
+    $name, $value = $_ -split '=', 2
+    [Environment]::SetEnvironmentVariable($name.Trim(), $value.Trim())
+}
+
+$env:LOAD_NOTES="true"
+uv run python infra/synthea/load_patients.py
+```
+
+> `cd` to your own clone path if different.
+
+Verify notes landed (expect `clinical_notes` with hundreds of points; id `0` is the
+model fingerprint, not a real note):
+
+```bash
+curl -s http://localhost:6333/collections/clinical_notes | jq .result.points_count   # macOS/Linux
 ```
 ```powershell
-$env:LOAD_NOTES="true"; uv run python infra/synthea/load_patients.py    # Windows
+curl.exe -s http://localhost:6333/collections/clinical_notes
+# -> "points_count": 900+  (966 notes + 1 fingerprint for seed=42 / 20 patients)
 ```
+
+Browse payloads in the Qdrant dashboard: http://localhost:6333/dashboard
+
 > The embedding model is defined once in [`backend/shared/embeddings.py`](backend/shared/embeddings.py)
 > (imported by both the loader and the future `vector_connector.py`), so the load-time and
 > query-time models can never drift. Nothing to configure — it travels with the repo.
@@ -146,3 +196,5 @@ Banner confirms: `MCP SDK 1.28.0 | endpoint http://localhost:8001/mcp | scope=mc
 | Load `.env` before the loader | it reads `VITALS_DB_URL` / `CLINICAL_DB_URL` from the environment |
 | Windows: `curl.exe`, not `curl` | PowerShell aliases `curl` to `Invoke-WebRequest` |
 | Windows: re-run the `.env` block per new window | the variables are session-scoped |
+| `LOAD_NOTES=true` before the loader | only needed if you want clinical notes in Qdrant early |
+| Browse SQL / notes in the browser | optional — see [`DATA_CHECKING.md`](DATA_CHECKING.md) |
