@@ -5,7 +5,7 @@ command line. This is **optional local tooling** — it does not change Person A
 Person B PRD scope; it only helps you verify that `load_patients.py` worked.
 
 For full setup, see [`IMPLEMENTATION.md`](IMPLEMENTATION.md). For architecture,
-see [`README.md`](README.md).
+see [`README.md`](../README.md).
 
 ---
 
@@ -123,7 +123,7 @@ LIMIT 10;
 ### One demo patient
 
 Friendly IDs like `demo-patient-1` map to UUIDs in
-[`infra/synthea/demo_patient_aliases.json`](infra/synthea/demo_patient_aliases.json).
+[`infra/synthea/demo_patient_aliases.json`](../infra/synthea/demo_patient_aliases.json).
 
 **PowerShell** — get UUID for `demo-patient-1`:
 

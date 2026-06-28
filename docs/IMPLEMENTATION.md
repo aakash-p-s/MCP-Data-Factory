@@ -2,8 +2,8 @@
 
 How to clone this repo on a **fresh machine** and bring the data layer + stub server up.
 Works for macOS/Linux (bash/zsh) and Windows (PowerShell). For a feature-by-feature
-reference of the backend itself, see [`backend/README.md`](backend/README.md); for the
-project overview and architecture, see [`README.md`](README.md).
+reference of the backend itself, see [`backend/README.md`](../backend/README.md); for the
+project overview and architecture, see [`README.md`](../README.md).
 
 > **Read this first — three things are NOT in the repo by design** and must be recreated locally:
 > 1. `.env` (gitignored — copy from `.env.example`)
@@ -169,7 +169,7 @@ curl.exe -s http://localhost:6333/collections/clinical_notes
 
 Browse payloads in the Qdrant dashboard: http://localhost:6333/dashboard
 
-> The embedding model is defined once in [`backend/shared/embeddings.py`](backend/shared/embeddings.py)
+> The embedding model is defined once in [`backend/shared/embeddings.py`](../backend/shared/embeddings.py)
 > (imported by both the loader and the future `vector_connector.py`), so the load-time and
 > query-time models can never drift. Nothing to configure — it travels with the repo.
 

@@ -5,7 +5,7 @@ Person A's **Day-1 `vitals_trends` stub**. Person A owns data stores + MCP serve
 Person B owns `docker-compose.platform.yml`, auth, gateway, registry, frontend, and agent.
 
 For Person A setup, see [`IMPLEMENTATION.md`](IMPLEMENTATION.md). For architecture, see
-[`README.md`](README.md).
+[`README.md`](../README.md).
 
 > **Before you build:** run the sync checklist in [`PERSON_B_SYNC.md`](PERSON_B_SYNC.md)
 > (re-download Synthea v4.0.0, re-init Keycloak for the static key, add the `scp` scope
@@ -18,7 +18,7 @@ For Person A setup, see [`IMPLEMENTATION.md`](IMPLEMENTATION.md). For architectu
 
 ## 1. Fixed contract (do not change without same-day notice)
 
-The stub contract is **frozen** in [`backend/servers/vitals_trends/blueprint.yaml`](backend/servers/vitals_trends/blueprint.yaml).
+The stub contract is **frozen** in [`backend/servers/vitals_trends/blueprint.yaml`](../backend/servers/vitals_trends/blueprint.yaml).
 Registry seeds for all four MCP servers should match these values even though only
 `vitals_trends` is live today.
 
@@ -148,7 +148,7 @@ Stub returns **hardcoded FHIR** (not DB-backed) until **Jun 29**. Any `patient_i
 string works for tool calls.
 
 For demos aligned with Person A's synthetic SQL data, use friendly aliases from
-[`infra/synthea/demo_patient_aliases.json`](infra/synthea/demo_patient_aliases.json):
+[`infra/synthea/demo_patient_aliases.json`](../infra/synthea/demo_patient_aliases.json):
 
 ```bash
 # Example: demo-patient-1 → UUID used in TimescaleDB / Postgres
@@ -159,8 +159,8 @@ python -c "import json; print(json.load(open('infra/synthea/demo_patient_aliases
 
 ## 6. MCP SDK version
 
-Pin the **`mcp` package identically** to Person A's [`requirements.txt`](requirements.txt)
-/ [`requirements.lock`](requirements.lock). A version mismatch breaks Streamable HTTP
+Pin the **`mcp` package identically** to Person A's [`requirements.txt`](../requirements.txt)
+/ [`requirements.lock`](../requirements.lock). A version mismatch breaks Streamable HTTP
 tool calls between agent and server.
 
 ---

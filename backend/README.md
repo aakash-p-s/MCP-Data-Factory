@@ -180,7 +180,7 @@ python3 -c "import json; print(json.load(open('infra/synthea/demo_patient_aliase
 
 MCP server over Streamable HTTP with hardcoded FHIR — unblocks Person B before the real
 DB-backed server (Jun 29). Contract is **fixed** (see `blueprint.yaml`). Integration
-checklist for Person B: [`HANDOVER_PERSON_B.md`](../HANDOVER_PERSON_B.md).
+checklist for Person B: [`HANDOVER_PERSON_B.md`](../docs/HANDOVER_PERSON_B.md).
 
 ```bash
 uv run python backend/servers/vitals_trends/main.py     # -> http://localhost:8001/mcp

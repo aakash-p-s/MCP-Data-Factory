@@ -24,7 +24,7 @@ set -a; . ./.env; set +a
 uv run python infra/synthea/load_patients.py
 ```
 - **31 patients**, `demo-patient-1` is now **`00050ed6-69b8-5c1f-02a3-dc3813143187`**.
-- Use aliases from [`infra/synthea/demo_patient_aliases.json`](infra/synthea/demo_patient_aliases.json), not hardcoded UUIDs.
+- Use aliases from [`infra/synthea/demo_patient_aliases.json`](../infra/synthea/demo_patient_aliases.json), not hardcoded UUIDs.
 
 ## 3. ⚠ Re-init the platform stack (static Keycloak key)
 The realm now pins a **static RSA signing key** so Kong stops throwing `Invalid signature`.
@@ -74,7 +74,7 @@ Registering all 4 in `registry-db` now is fine; the unbuilt 3 will 404 upstream 
 - Token claims: `sub`, `oid`, `groups[]`, `scp` (space-separated)
 - vitals: tools `get_vitals_trend / compute_news2_score / list_abnormal_vitals`, scope `mcp.vitals.read`, route `/mcp/clinical/vitals-trends/dev`
 - Success → FHIR R4 `Observation`; denial → `403 {"error":{"code":"forbidden","reason":"missing scope <scope>"}}`
-- Pin the `mcp` SDK to match [`requirements.lock`](requirements.lock) (`mcp==1.28.0`)
+- Pin the `mcp` SDK to match [`requirements.lock`](../requirements.lock) (`mcp==1.28.0`)
 
 ---
 
