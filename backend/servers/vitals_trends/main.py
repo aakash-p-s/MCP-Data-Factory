@@ -26,11 +26,24 @@ import os
 
 import jwt
 from mcp.server.fastmcp import FastMCP
+from mcp.server.transport_security import TransportSecuritySettings
 
 PORT = int(os.getenv("VITALS_PORT", "8001"))
 REQUIRED_SCOPE = "mcp.vitals.read"
 
-mcp = FastMCP("vitals_trends", stateless_http=True)
+# MCP DNS-rebinding protection rejects any Host header not in this list. Behind Kong
+# the forwarded Host is the upstream (e.g. host.docker.internal:8001), so allow-list the
+# known hosts instead of disabling protection. Extra hosts via ALLOWED_HOSTS (comma-sep).
+_default_hosts = [f"localhost:{PORT}", f"127.0.0.1:{PORT}", f"host.docker.internal:{PORT}",
+                  "localhost", "127.0.0.1", "host.docker.internal"]
+_extra_hosts = [h.strip() for h in os.getenv("ALLOWED_HOSTS", "").split(",") if h.strip()]
+_transport_security = TransportSecuritySettings(
+    enable_dns_rebinding_protection=True,
+    allowed_hosts=_default_hosts + _extra_hosts,
+    allowed_origins=["*"],
+)
+
+mcp = FastMCP("vitals_trends", stateless_http=True, transport_security=_transport_security)
 
 
 # --- FHIR helper (inlined for the stub; shared fhir_shape.py arrives later) ---
