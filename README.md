@@ -227,10 +227,10 @@ patient-risk-intelligence/
 │   │   ├── egress_guard.py              [ ]  SSRF / egress lock
 │   │   └── cache.py                     [ ]  30s TTL cache
 │   ├── connectors/
-│   │   ├── sql_connector.py             [ ]  TimescaleDB/Postgres (Jun 29)
+│   │   ├── sql_connector.py             [x]  TimescaleDB/Postgres (asyncpg, read-only guard)
 │   │   └── vector_connector.py          [ ]  Qdrant (Jul 6)
 │   ├── servers/
-│   │   ├── vitals_trends/               [~]  STUB live (main.py, blueprint.yaml); real server Jun 29
+│   │   ├── vitals_trends/               [x]  DB-backed (main.py, tools.py, news2.py, blueprint.yaml)
 │   │   ├── labs_diagnoses/              [ ]  (Jun 30)
 │   │   ├── medications_interactions/    [ ]  + interactions.py (Jul 1)
 │   │   └── clinical_notes_search/       [ ]  vector server (Jul 6)
