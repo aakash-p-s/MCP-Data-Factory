@@ -174,7 +174,8 @@ python3 -c "import json; print(json.load(open('infra/synthea/demo_patient_aliase
 - [x] **Phase 2 (Fri Jun 26)** — Synthea loader; vitals=292, labs=6787, diagnoses=732, meds=1071; determinism verified
 - [x] **Phase 3 (Fri Jun 26)** — Day-1 stub server (`vitals_trends`) verified + handed to Person B
 - [x] **Mon Jun 29** — real `vitals_trends` server: `sql_connector.py`, `tools.py`, `news2.py` (live TimescaleDB)
-- [ ] **Tue Jun 30** — `labs_diagnoses` server: `get_lab_trend`, `get_active_diagnoses`, `get_diagnosis_history`
+- [x] **Tue Jun 30** — `labs_diagnoses` server: `get_lab_trend`, `get_active_diagnoses`, `get_diagnosis_history` (live Postgres)
+- [ ] **Wed Jul 1** — `medications_interactions` server: `get_active_medications`, `check_drug_interactions`, `get_polypharmacy_risk`
 
 ### Day-1 Stub Server (`backend/servers/vitals_trends/`)
 

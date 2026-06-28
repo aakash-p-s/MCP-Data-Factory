@@ -1,0 +1,6 @@
+# labs_diagnoses server — pin mcp identically across all servers + agent (PRD §8)
+mcp>=1.27,<2
+fastapi==0.136.*
+uvicorn[standard]
+pyjwt
+asyncpg          # SQLConnector uses asyncpg for read-only queries
