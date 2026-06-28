@@ -79,12 +79,12 @@ Schemas auto-load on first init. To re-apply after editing a `.sql`:
 **macOS / Linux**
 ```bash
 curl -sL -o infra/synthea/synthea-with-dependencies.jar \
-  https://github.com/synthetichealth/synthea/releases/download/master-branch-latest/synthea-with-dependencies.jar
+  https://github.com/synthetichealth/synthea/releases/download/v4.0.0/synthea-with-dependencies.jar
 ```
 **Windows** (use `curl.exe`, not `curl`)
 ```powershell
 curl.exe -L -o infra/synthea/synthea-with-dependencies.jar `
-  https://github.com/synthetichealth/synthea/releases/download/master-branch-latest/synthea-with-dependencies.jar
+  https://github.com/synthetichealth/synthea/releases/download/v4.0.0/synthea-with-dependencies.jar
 ```
 Confirm it's ~180–190 MB (not a few KB) and runnable: `java -jar infra/synthea/synthea-with-dependencies.jar --help`.
 

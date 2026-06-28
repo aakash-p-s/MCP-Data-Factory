@@ -150,7 +150,7 @@ docker exec postgres-clinical  psql -U postgres -d clinical -c "\dt"
 
 # --- Phase 2: synthetic data (fixed seed) ----------------------------------
 curl -sL -o infra/synthea/synthea-with-dependencies.jar \
-  https://github.com/synthetichealth/synthea/releases/download/master-branch-latest/synthea-with-dependencies.jar
+  https://github.com/synthetichealth/synthea/releases/download/v4.0.0/synthea-with-dependencies.jar
 set -a; . ./.env; set +a
 uv run python infra/synthea/load_patients.py           # truncates + reseeds (reproducible)
 docker exec timescaledb-vitals psql -U postgres -d vitals -c "SELECT count(*) FROM vitals;"

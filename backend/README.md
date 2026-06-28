@@ -129,7 +129,7 @@ One-time: download the Synthea jar (~188 MB):
 
 ```bash
 curl -sL -o infra/synthea/synthea-with-dependencies.jar \
-  https://github.com/synthetichealth/synthea/releases/download/master-branch-latest/synthea-with-dependencies.jar
+  https://github.com/synthetichealth/synthea/releases/download/v4.0.0/synthea-with-dependencies.jar
 ```
 
 Run the loader (data stores must be up; ~2 min — generates + truncates + loads):
