@@ -6,6 +6,159 @@ for everyone are called out so Person B / other machines can stay in sync. See
 
 ---
 
+## 2026-07-08 — MCP Inspector + full RBAC matrix (Jul 3/8 acceptance)
+
+### HTTP-level RBAC matrix
+- **`backend/tests/test_rbac_matrix_http.py`** — parametrized **4 servers × 3 roles** against
+  `FixedCoreGuard` via Starlette `TestClient` (MCP lifespan + transport-security host).
+  Expect **200** (allowed), **403** (forbidden), or **401** (no Bearer).
+- **`backend/tests/rbac_fixtures.py`** — shared matrix constants, JWT helpers, `mcp_test_client()`.
+- Cross-check: **`test_rbac_matrix_auth_engine_matches_http`** keeps HTTP matrix aligned with
+  `auth.evaluate()`.
+
+### MCP Inspector smoke
+- **`backend/tests/test_mcp_inspector.py`** — physician `tools/list` + `/health` on all 4 servers
+  (12 frozen tool names).
+- **`scripts/mcp_inspector_smoke.py`** — live `:8001–8004` or **`--in-process`** (no running servers).
+
+### Test count
+- **62 pytest passing** (`uv run pytest backend/tests/ -q`).
+
+---
+
+## 2026-07-08 — unified `docker-compose.yml`
+
+### Single compose file for the full stack
+- **`docker-compose.yml`** merges Person A data stores + Person B platform (Keycloak, Kong,
+  registry-db, registry-api, Jaeger). Optional profiles: `tools` (pgAdmin), `full` (agent + frontend).
+- Split files **`docker-compose.data.yml`** and **`docker-compose.platform.yml`** remain for
+  partial runs; headers point to the unified file.
+- Duplicate platform `pgadmin` removed (one pgAdmin in unified/data compose, `--profile tools`).
+- **`CLINICAL_PORT` default aligned to 5434** in `docker-compose.data.yml` (matches `.env.example`).
+
+```bash
+docker compose up -d                              # data + platform core
+docker compose --profile tools up -d pgadmin     # optional SQL browser
+docker compose --profile full up -d               # + agent/frontend when dirs exist
+```
+
+---
+
+## 2026-07-07 — self-healing (tenacity + connector reset)
+
+### `backend/shared/self_healing.py`
+- **`run_with_self_healing()`** — exponential backoff retry (default 3 attempts) on transient
+  connection errors (asyncpg pool stale, Qdrant unreachable). Optional **reset** callback
+  drops pool/client before retry.
+- Wired into **`SQLConnector`** and **`VectorConnector`** `connect()`, `query()`, and `schema()`.
+- Docker **`restart: unless-stopped`** handles process crashes; self-healing handles in-process blips.
+
+### Tests
+- **`backend/tests/test_self_healing.py`** — chaos demo: simulated stale pool → retry → success;
+  logic errors are not retried.
+
+### Env
+```
+SELF_HEAL_MAX_ATTEMPTS=3
+```
+
+---
+
+## 2026-07-06 — clinical_notes_search vector server (4th MCP domain)
+
+### `clinical_notes_search` is now Qdrant-backed
+- **`backend/connectors/vector_connector.py`** — `VectorConnector(Connector)` over Qdrant; same
+  interface as `SQLConnector`. Embedding fingerprint verified on connect via `assert_model_matches()`.
+- **`backend/servers/clinical_notes_search/`** — three tools:
+  `semantic_search_notes`, `get_recent_notes`, `get_notes_by_type` → FHIR `DocumentReference`.
+- **RBAC:** physician + case-manager allow; clinical-viewer deny (`mcp.notes.read`).
+- **Requires notes in Qdrant** — run once with notes enabled:
+  ```bash
+  LOAD_NOTES=true uv run python infra/synthea/load_patients.py
+  uv run python backend/servers/clinical_notes_search/main.py   # -> http://localhost:8004/mcp
+  ```
+- **`egress_guard.py`** extended — `locked_connector_for("clinical_notes_search")` returns `VectorConnector`.
+
+---
+
+## 2026-07-02 — Fixed Core hardening (auth + audit + egress + cache)
+
+### Shared `FixedCoreGuard` replaces per-server `ScopeGuard`
+- **`backend/shared/middleware.py`** — one ASGI guard for all three SQL servers: JWT verify
+  (via `auth.py`), scope + group RBAC, auth-level audit, request context for PHI audit.
+- **`backend/shared/request_context.py`** — per-request claims / `X-Purpose-Of-Access` / trace id.
+- **No token → 401** by default (`AUTH_ALLOW_ANONYMOUS=true` restores POC anonymous access).
+- **Signature verify** gated by `AUTH_VERIFY_SIGNATURE=true` (flip on once Keycloak `scp` mapping is wired).
+
+### `auth.py` — Layer-2 engine
+- JWKS signature verify (RS256) when enabled; scope (`scp`) + group (`groups[]`) deny-by-default RBAC.
+
+### `audit.py` — every PHI touch logged
+- Auth gate + each tool call writes `AUDIT {who, what, when, outcome, purpose_of_access}` to stdout.
+- `purpose_of_access` is a **fixed enum** (`routine_review`, `deterioration_review`, …); pass via
+  `X-Purpose-Of-Access` header (invalid values fall back to `routine_review`).
+
+### `egress_guard.py` — connectors locked at construction
+- Servers call `locked_connector_for("<domain>")` — DSN resolved from allow-list only; no runtime redirection.
+
+### `cache.py` — 30s TTL on read-heavy tools
+- `@cached(30)` on `get_vitals_trend` and `get_lab_trend` (per blueprint).
+
+### Tests
+- `backend/tests/test_rbac_matrix.py` — 3-role scope/group matrix
+- `backend/tests/test_fixed_core.py` — audit enum, cache TTL, egress guard
+
+### New `.env` vars (see `.env.example`)
+```
+AUTH_VERIFY_SIGNATURE=false   # true once Keycloak scp mapping is live
+AUTH_ALLOW_ANONYMOUS=false    # true for local POC without tokens
+```
+
+---
+
+## 2026-06-30 — labs + meds servers, interim RBAC matrix, interaction rules seed
+
+### `labs_diagnoses` is now DB-backed (was planned Jun 30)
+- `backend/servers/labs_diagnoses/` — `get_lab_trend`, `get_active_diagnoses`, `get_diagnosis_history`
+  query live Postgres via `SQLConnector(CLINICAL_DB_URL)`.
+- **Contract unchanged** (tool names, scope `mcp.labs.read`, route, FHIR shape, 403).
+  ```bash
+  uv run python backend/servers/labs_diagnoses/main.py     # -> http://localhost:8002/mcp
+  ```
+
+### `medications_interactions` is now DB-backed (was planned Jul 1)
+- `backend/servers/medications_interactions/` — `get_active_medications`, `check_drug_interactions`,
+  `get_polypharmacy_risk` over Postgres + curated `interaction_rules` table.
+- **Illustrative only** — the rule set is a small open RxNorm demo, not a licensed clinical DB.
+- **Contract unchanged** (scope `mcp.meds.read`, route, FHIR `MedicationStatement`, 403).
+  ```bash
+  uv run python backend/servers/medications_interactions/main.py   # -> http://localhost:8003/mcp
+  ```
+
+### Curated drug-interaction rules seeded on first Postgres init
+- `infra/postgres/seed-interaction-rules.sql` — six RxNorm pairs (e.g. lisinopril + naproxen on
+  `demo-patient-1`) auto-loaded via `docker-compose.data.yml` init hook.
+- **⚠ action — only if Postgres volume already existed before this file landed:**
+  ```bash
+  docker exec -i postgres-clinical psql -U postgres -d clinical \
+    < infra/postgres/seed-interaction-rules.sql
+  ```
+  Or reset the clinical volume: `docker compose -f docker-compose.data.yml down -v && up -d`,
+  then re-run the loader.
+
+### Interim group-based RBAC on all three SQL servers
+- `vitals_trends`, `labs_diagnoses`, and `medications_interactions` now enforce the blueprint
+  **RBAC matrix** when a bearer token carries `groups[]` — e.g. case-manager is denied vitals/labs
+  even with a coarse `scp`; meds is **physician-only** (clinical-viewer denied).
+- Service-account tokens with no `groups` still pass (POC-friendly). Full JWT signature verify +
+  shared engine lands Jul 2 in `backend/shared/auth.py`.
+
+### Synthea loader: clear output dir before generation
+- `infra/synthea/load_patients.py` wipes `infra/synthea/output/` before each run so stale FHIR
+  files from a prior jar/version cannot pollute the next load.
+
+---
+
 ## 2026-06-28 — integration with Person B, real vitals server, determinism pin
 
 ### Synthea version pinned → `v4.0.0` (cross-machine determinism)

@@ -1,6 +1,7 @@
-# Person B platform half — infra/ + backend/registry layout (canonical paths).
-# agent + frontend require ./agent and ./frontend (not uploaded yet) — profile: full
-# registry-db host port 5435 avoids clash with Person A TimescaleDB on 5433.
+# Person B platform half — gateway, identity, registry, tracing.
+# Prefer the unified stack:  docker compose up -d   (see docker-compose.yml)
+#
+#   docker compose -f docker-compose.platform.yml up -d
 
 services:
 
@@ -104,15 +105,6 @@ services:
     depends_on:
       - agent
       - registry-api
-
-  pgadmin:
-    profiles: ["tools"]
-    image: dpage/pgadmin4:8.6
-    environment:
-      PGADMIN_DEFAULT_EMAIL: admin@admin.com
-      PGADMIN_DEFAULT_PASSWORD: admin
-    ports:
-      - "5050:80"
 
   jaeger:
     image: jaegertracing/all-in-one:1.57

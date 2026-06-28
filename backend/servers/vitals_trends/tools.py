@@ -12,6 +12,7 @@ otherwise a 24h window over months-old synthetic data would always be empty.
 from __future__ import annotations
 
 from backend.connectors.sql_connector import SQLConnector
+from backend.shared.cache import cached
 
 from .news2 import compute_news2
 
@@ -62,6 +63,7 @@ async def _fetch_window(conn: SQLConnector, patient_id: str, hours: int) -> list
     return await conn.query({"sql": sql, "args": [patient_id, hours]})
 
 
+@cached(ttl_seconds=30)
 async def get_vitals_trend(conn: SQLConnector, patient_id: str, hours: int = 24) -> list[dict]:
     """Recent vital-sign Observations — one per (timestamp, measured vital)."""
     rows = await _fetch_window(conn, patient_id, hours)

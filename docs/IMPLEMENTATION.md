@@ -1,6 +1,6 @@
 # Implementation & Setup Guide — Person A (Data & Backend)
 
-How to clone this repo on a **fresh machine** and bring the data layer + stub server up.
+How to clone this repo on a **fresh machine** and bring the data layer + MCP servers up.
 Works for macOS/Linux (bash/zsh) and Windows (PowerShell). For a feature-by-feature
 reference of the backend itself, see [`backend/README.md`](../backend/README.md); for the
 project overview and architecture, see [`README.md`](../README.md).
@@ -51,7 +51,7 @@ Copy-Item .env.example .env
 notepad .env
 ```
 Set `TIMESCALE_PASSWORD` / `CLINICAL_PASSWORD`. Default ports: Timescale **5433**,
-Postgres **5434**, Qdrant **6333**, stub **8001**. If a port is taken, change it in `.env`.
+Postgres **5434**, Qdrant **6333**, MCP servers **8001–8004**. If a port is taken, change it in `.env`.
 
 ## 3. Python environment
 
@@ -64,13 +64,15 @@ uv run python -c "import fastapi, mcp, qdrant_client, asyncpg, jwt; print('impor
 ## 4. Data stores (Docker)
 
 ```bash
-docker compose -f docker-compose.data.yml up -d
-docker compose -f docker-compose.data.yml ps         # wait for "healthy"
+docker compose up -d
+docker compose ps                                    # wait for "healthy"
 docker exec timescaledb-vitals psql -U postgres -d vitals   -c "\dt"
 docker exec postgres-clinical  psql -U postgres -d clinical -c "\dt"
 ```
 Schemas auto-load on first init. To re-apply after editing a `.sql`:
-`docker compose -f docker-compose.data.yml down -v` then `up -d`.
+`docker compose down -v` then `up -d`.
+
+Data stores only (split file): `docker compose -f docker-compose.data.yml up -d`
 
 ## 5. Synthetic data (Synthea)
 
@@ -173,21 +175,37 @@ Browse payloads in the Qdrant dashboard: http://localhost:6333/dashboard
 > (imported by both the loader and the future `vector_connector.py`), so the load-time and
 > query-time models can never drift. Nothing to configure — it travels with the repo.
 
-## 6. Stub server (`vitals_trends`)
+## 6. MCP servers (all 4 live)
+
+Data stores must be running (Section 4). For notes, load Qdrant first:
+`LOAD_NOTES=true uv run python infra/synthea/load_patients.py`
+
+Start each server in its own terminal:
 
 ```bash
-uv run python backend/servers/vitals_trends/main.py     # -> http://localhost:8001/mcp
+uv run python backend/servers/vitals_trends/main.py              # -> :8001/mcp  mcp.vitals.read
+uv run python backend/servers/labs_diagnoses/main.py             # -> :8002/mcp  mcp.labs.read
+uv run python backend/servers/medications_interactions/main.py   # -> :8003/mcp  mcp.meds.read
+uv run python backend/servers/clinical_notes_search/main.py      # -> :8004/mcp  mcp.notes.read
 ```
-Banner confirms: `MCP SDK 1.28.0 | endpoint http://localhost:8001/mcp | scope=mcp.vitals.read
-| route=/mcp/clinical/vitals-trends/dev`. Tools: `get_vitals_trend`, `compute_news2_score`,
-`list_abnormal_vitals`. Missing-scope token → `403 {"error":{"code":"forbidden","reason":"missing scope mcp.vitals.read"}}`.
+
+| Server | Tools | Scope | Kong route |
+| --- | --- | --- | --- |
+| vitals_trends | `get_vitals_trend`, `compute_news2_score`, `list_abnormal_vitals` | `mcp.vitals.read` | `/mcp/clinical/vitals-trends/dev` |
+| labs_diagnoses | `get_lab_trend`, `get_active_diagnoses`, `get_diagnosis_history` | `mcp.labs.read` | `/mcp/clinical/labs-diagnoses/dev` |
+| medications_interactions | `get_active_medications`, `check_drug_interactions`, `get_polypharmacy_risk` | `mcp.meds.read` | `/mcp/clinical/medications-interactions/dev` |
+| clinical_notes_search | `semantic_search_notes`, `get_recent_notes`, `get_notes_by_type` | `mcp.notes.read` | `/mcp/clinical/clinical-notes-search/dev` |
+
+Each server banner confirms DB-backed mode, MCP SDK version, health URL, scope, and route.
+Missing-scope or disallowed-role token → `403`. No bearer → `401` (set `AUTH_ALLOW_ANONYMOUS=true` for local POC).
+See [`MCP_SERVERS.md`](MCP_SERVERS.md) for tool-call examples.
 
 ---
 
 ## Updating an existing clone (your other machine)
 
 Already set up once? Don't redo the above — just pull the latest. All config (embedding
-model pin, schemas, stub, platform files) travels with the repo.
+model pin, schemas, MCP servers, platform files) travels with the repo.
 
 ```bash
 git pull                                  # on the person-a/phase-2 branch
@@ -198,8 +216,9 @@ git pull                                  # Windows is identical
 
 Only re-run a step if its *inputs* changed:
 - **Dependencies changed** (`requirements.txt`) → `uv pip install -r requirements.txt`
-- **Schema `.sql` changed** → `docker compose -f docker-compose.data.yml down -v && up -d`
+- **Schema `.sql` changed** (including `seed-interaction-rules.sql`) → `docker compose down -v && up -d`
 - **Loader changed / want fresh data** → re-run the loader (Section 5)
+- **New MCP servers shipped** → start the new server(s) (Section 6); no data reload needed unless the loader changed
 
 Optional — make clinical notes searchable in Qdrant on this machine too (model auto-downloads):
 
@@ -225,4 +244,6 @@ $env:LOAD_NOTES="true"; uv run python infra/synthea/load_patients.py    # Window
 | Windows: `curl.exe`, not `curl` | PowerShell aliases `curl` to `Invoke-WebRequest` |
 | Windows: re-run the `.env` block per new window | the variables are session-scoped |
 | `LOAD_NOTES=true` before the loader | only needed if you want clinical notes in Qdrant early |
+| `AUTH_ALLOW_ANONYMOUS=true` | local POC without Bearer tokens (default requires auth) |
+| `AUTH_VERIFY_SIGNATURE=true` | full JWKS verify once Keycloak scp mapping is wired |
 | Browse SQL / notes in the browser | optional — see [`DATA_CHECKING.md`](DATA_CHECKING.md) |

@@ -1,9 +1,11 @@
 # Infrastructure — Docker Services, Roles & Flow
 
-Everything runs as containers across **two compose files** (merged into one on Jul 8):
+Everything runs as containers in **`docker-compose.yml`** (Jul 8 merge of the two halves below).
+Split files remain for partial runs:
 
-- **`docker-compose.data.yml`** — Person A's half: the 3 data stores.
-- **`docker-compose.platform.yml`** — Person B's half: gateway, identity, registry, tracing.
+- **`docker-compose.yml`** — full stack (preferred): `docker compose up -d`
+- **`docker-compose.data.yml`** — data stores only
+- **`docker-compose.platform.yml`** — gateway/identity/registry only
 
 Companion: [`MCP_SERVERS.md`](MCP_SERVERS.md) (the servers that sit between Kong and the data).
 
@@ -37,9 +39,9 @@ flowchart LR
     AG -->|/mcp/clinical/*/dev| KONG[kong :8000<br/>Layer-1 gateway]
 
     KONG -->|validate JWT signature<br/>via pinned realm key<br/>rate-limit, route| V[vitals_trends :8001]
-    KONG -.-> L[labs :8002]
-    KONG -.-> M[meds :8003]
-    KONG -.-> N[notes :8004]
+    KONG --> L[labs_diagnoses :8002]
+    KONG --> M[medications_interactions :8003]
+    KONG --> N[clinical_notes_search :8004]
 
     V --> TS[(timescaledb :5433)]
     L --> PG[(postgres :5434)]
@@ -64,7 +66,9 @@ TimescaleDB = PostgreSQL 16 + a time-series extension. The `vitals` table is a *
 
 ### postgres-clinical — `:5434`
 Plain PostgreSQL 16 holding **`labs`, `diagnoses`, `medications`, `interaction_rules`** in one
-`clinical` database. (Port is 5434 because 5432 was taken locally.) Read via `CLINICAL_DB_URL`.
+`clinical` database. The `interaction_rules` table is seeded from
+`infra/postgres/seed-interaction-rules.sql` on first init (curated RxNorm demo pairs).
+Read via `CLINICAL_DB_URL`.
 
 ### qdrant — `:6333`
 Vector database for clinical notes. The loader embeds notes with `all-MiniLM-L6-v2` and upserts
@@ -72,10 +76,17 @@ them into the `clinical_notes` collection (plus a fingerprint point so a model m
 loudly — see `backend/shared/embeddings.py`). Dashboard at http://localhost:6333/dashboard.
 
 ```bash
-docker compose -f docker-compose.data.yml up -d
-docker compose -f docker-compose.data.yml ps
+docker compose up -d
+docker compose ps
 docker exec timescaledb-vitals psql -U postgres -d vitals   -c "\dt"
 docker exec postgres-clinical  psql -U postgres -d clinical -c "\dt"
+```
+
+Partial stack (legacy split files):
+
+```bash
+docker compose -f docker-compose.data.yml up -d
+docker compose -f docker-compose.platform.yml up -d
 ```
 
 ---
@@ -126,8 +137,8 @@ returns 401 without a token.
 Receives OpenTelemetry traces (one trace id per question across all hops). UI at :16686.
 
 ```bash
-docker compose -f docker-compose.platform.yml up -d        # keycloak, kong, registry-db, registry-api, jaeger
-docker compose -f docker-compose.platform.yml --profile full up -d   # + agent, frontend (when uploaded)
+docker compose up -d        # keycloak, kong, registry-db, registry-api, jaeger (+ data stores)
+docker compose --profile full up -d   # + agent, frontend (when uploaded)
 ```
 
 ---
@@ -135,30 +146,36 @@ docker compose -f docker-compose.platform.yml --profile full up -d   # + agent, 
 ## Full green-path test (token → Kong → server → FHIR)
 
 ```bash
-# data stores + the vitals server (host)
-docker compose -f docker-compose.data.yml up -d
+# data stores + platform + the four MCP servers (host)
+docker compose up -d
 uv run python backend/servers/vitals_trends/main.py &
+uv run python backend/servers/labs_diagnoses/main.py &
+uv run python backend/servers/medications_interactions/main.py &
+uv run python backend/servers/clinical_notes_search/main.py &
 
 TOK=$(curl -s -X POST http://localhost:8080/realms/patient-risk/protocol/openid-connect/token \
   -d grant_type=client_credentials -d client_id=patient-risk-agent \
   -d client_secret=agent-secret-change-in-prod | python3 -c "import sys,json;print(json.load(sys.stdin)['access_token'])")
 
-curl -s -o /dev/null -w "%{http_code}\n" http://localhost:8000/mcp/clinical/vitals-trends/dev -X POST \
-  -H "Authorization: Bearer $TOK" -H "Accept: application/json, text/event-stream" \
-  -H "Content-Type: application/json" -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}'
-# -> 200  (200 means signature + host header + route all good)
+for route in vitals-trends labs-diagnoses medications-interactions clinical-notes-search; do
+  curl -s -o /dev/null -w "$route %{http_code}\n" \
+    "http://localhost:8000/mcp/clinical/$route/dev" -X POST \
+    -H "Authorization: Bearer $TOK" -H "Accept: application/json, text/event-stream" \
+    -H "Content-Type: application/json" -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}'
+done
+# each -> 200  (signature + host header + route all good)
 ```
 
 ## Re-initialising / resetting
 
 ```bash
 # data: drop volumes to re-run schemas from scratch
-docker compose -f docker-compose.data.yml down -v && docker compose -f docker-compose.data.yml up -d
+docker compose down -v && docker compose up -d
 
-# platform: re-import the Keycloak realm (e.g. after a realm-export.json change)
-docker compose -f docker-compose.platform.yml down
-docker volume rm data_factory_keycloak_data
-docker compose -f docker-compose.platform.yml up -d keycloak kong registry-db registry-api
+# platform only: re-import Keycloak realm (after realm-export.json change)
+docker compose stop keycloak
+docker volume rm data_factory_keycloak_data 2>/dev/null || docker volume rm $(docker volume ls -q | grep keycloak_data | head -1)
+docker compose up -d keycloak kong registry-db registry-api
 ```
 
 > Port reference: data → 5433/5434/6333 (+5050); platform → 8080/8000/8101/5435/8600/16686;

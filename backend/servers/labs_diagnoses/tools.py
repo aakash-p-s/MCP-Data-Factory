@@ -7,6 +7,7 @@ Observation (labs, LOINC) and Condition (diagnoses, SNOMED/ICD-10) resources.
 from __future__ import annotations
 
 from backend.connectors.sql_connector import SQLConnector
+from backend.shared.cache import cached
 
 
 def _lab_observation(row: dict) -> dict:
@@ -53,6 +54,7 @@ def _condition(row: dict) -> dict:
     }
 
 
+@cached(ttl_seconds=30)
 async def get_lab_trend(conn: SQLConnector, patient_id: str, test_name: str | None = None) -> list[dict]:
     """Lab Observations for a patient, newest first; optional case-insensitive test filter."""
     if test_name:

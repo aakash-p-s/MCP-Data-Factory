@@ -1,0 +1,209 @@
+# Unified stack — Person A data stores + Person B platform (Jul 8 merge).
+# MCP servers run on the host (:8001–8004); Kong reaches them via host.docker.internal.
+#
+#   docker compose up -d                         # data + platform core
+#   docker compose --profile tools up -d         # + pgAdmin (:5050)
+#   docker compose --profile full up -d          # + agent + frontend (when ./agent ./frontend exist)
+#
+# Split files kept for reference:
+#   docker-compose.data.yml     — data stores only
+#   docker-compose.platform.yml — gateway/identity/registry only
+
+services:
+  # ---------------------------------------------------------------------------
+  # DATA (Person A)
+  # ---------------------------------------------------------------------------
+  timescaledb-vitals:
+    image: timescale/timescaledb:latest-pg16
+    container_name: timescaledb-vitals
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${TIMESCALE_DB:-vitals}
+      POSTGRES_USER: ${TIMESCALE_USER:-postgres}
+      POSTGRES_PASSWORD: ${TIMESCALE_PASSWORD:-changeme}
+    ports:
+      - "${TIMESCALE_PORT:-5433}:5432"
+    volumes:
+      - timescale_data:/var/lib/postgresql/data
+      - ./infra/postgres/init-timescale-vitals.sql:/docker-entrypoint-initdb.d/01-init-timescale-vitals.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${TIMESCALE_USER:-postgres} -d ${TIMESCALE_DB:-vitals}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  postgres-clinical:
+    image: postgres:16
+    container_name: postgres-clinical
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${CLINICAL_DB:-clinical}
+      POSTGRES_USER: ${CLINICAL_USER:-postgres}
+      POSTGRES_PASSWORD: ${CLINICAL_PASSWORD:-changeme}
+    ports:
+      - "${CLINICAL_PORT:-5434}:5432"
+    volumes:
+      - clinical_data:/var/lib/postgresql/data
+      - ./infra/postgres/init-labs-diagnoses.sql:/docker-entrypoint-initdb.d/01-init-labs-diagnoses.sql:ro
+      - ./infra/postgres/init-medications.sql:/docker-entrypoint-initdb.d/02-init-medications.sql:ro
+      - ./infra/postgres/seed-interaction-rules.sql:/docker-entrypoint-initdb.d/03-seed-interaction-rules.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${CLINICAL_USER:-postgres} -d ${CLINICAL_DB:-clinical}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: qdrant
+    restart: unless-stopped
+    ports:
+      - "6333:6333"
+      - "6334:6334"
+    volumes:
+      - qdrant_data:/qdrant/storage
+
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: pgadmin
+    restart: unless-stopped
+    profiles: ["tools"]
+    environment:
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_EMAIL:-admin@example.com}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD:-changeme}
+      PGADMIN_CONFIG_SERVER_MODE: "False"
+    ports:
+      - "5050:80"
+    depends_on:
+      timescaledb-vitals:
+        condition: service_healthy
+      postgres-clinical:
+        condition: service_healthy
+
+  # ---------------------------------------------------------------------------
+  # PLATFORM (Person B)
+  # ---------------------------------------------------------------------------
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.0
+    container_name: keycloak
+    restart: unless-stopped
+    command: start-dev --import-realm
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: admin
+      KC_BOOTSTRAP_ADMIN_PASSWORD: admin
+      KC_DB: dev-file
+    volumes:
+      - ./infra/keycloak/realm-export.json:/opt/keycloak/data/import/realm-export.json
+      - keycloak_data:/opt/keycloak/data
+    ports:
+      - "8080:8080"
+    healthcheck:
+      test: ["CMD-SHELL", "exec 3<>/dev/tcp/localhost/8080 && echo -e 'GET /realms/patient-risk HTTP/1.0\r\n\r\n' >&3 && cat <&3 | grep -q patient-risk"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+
+  kong:
+    image: kong:3.7
+    container_name: kong
+    restart: unless-stopped
+    environment:
+      KONG_DATABASE: "off"
+      KONG_DECLARATIVE_CONFIG: /etc/kong/kong.yml
+      KONG_PROXY_ACCESS_LOG: /dev/stdout
+      KONG_ADMIN_ACCESS_LOG: /dev/stdout
+      KONG_PROXY_ERROR_LOG: /dev/stderr
+      KONG_ADMIN_ERROR_LOG: /dev/stderr
+      KONG_ADMIN_LISTEN: "0.0.0.0:8001"
+    volumes:
+      - ./infra/kong/kong.yml:/etc/kong/kong.yml
+    ports:
+      - "8000:8000"
+      - "8101:8001"
+    depends_on:
+      keycloak:
+        condition: service_started
+
+  registry-db:
+    image: postgres:16
+    container_name: registry-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: registry
+      POSTGRES_USER: registry_user
+      POSTGRES_PASSWORD: registry_pass
+    volumes:
+      - registry_data:/var/lib/postgresql/data
+      - ./infra/postgres/init-registry-db.sql:/docker-entrypoint-initdb.d/init-registry-db.sql
+    ports:
+      - "5435:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U registry_user -d registry"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  registry-api:
+    build: ./backend/registry
+    container_name: registry-api
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql+asyncpg://registry_user:registry_pass@registry-db:5432/registry
+      KEYCLOAK_JWKS_URL: http://keycloak:8080/realms/patient-risk/protocol/openid-connect/certs
+      KEYCLOAK_AUDIENCE: patient-risk-agent
+    ports:
+      - "8600:8600"
+    depends_on:
+      registry-db:
+        condition: service_healthy
+      keycloak:
+        condition: service_started
+
+  jaeger:
+    image: jaegertracing/all-in-one:1.57
+    container_name: jaeger
+    restart: unless-stopped
+    ports:
+      - "16686:16686"
+      - "4317:4317"
+
+  agent:
+    profiles: ["full"]
+    build: ./agent
+    environment:
+      KEYCLOAK_JWKS_URL: http://keycloak:8080/realms/patient-risk/protocol/openid-connect/certs
+      VITALS_MCP_URL: http://kong:8000/mcp/clinical/vitals-trends/dev
+      LABS_MCP_URL: http://kong:8000/mcp/clinical/labs-diagnoses/dev
+      MEDS_MCP_URL: http://kong:8000/mcp/clinical/medications-interactions/dev
+      NOTES_MCP_URL: http://kong:8000/mcp/clinical/clinical-notes-search/dev
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4317
+    ports:
+      - "8500:8500"
+    depends_on:
+      - kong
+      - jaeger
+
+  frontend:
+    profiles: ["full"]
+    build: ./frontend
+    environment:
+      NEXTAUTH_URL: http://localhost:3000
+      NEXTAUTH_SECRET: ${NEXTAUTH_SECRET:-change-me-in-prod}
+      KEYCLOAK_CLIENT_ID: patient-risk-agent
+      KEYCLOAK_CLIENT_SECRET: ${KEYCLOAK_CLIENT_SECRET:-agent-secret-change-in-prod}
+      KEYCLOAK_ISSUER: http://localhost:8080/realms/patient-risk
+      NEXT_PUBLIC_AGENT_URL: http://localhost:8500
+      NEXT_PUBLIC_REGISTRY_URL: http://localhost:8600
+    ports:
+      - "3000:3000"
+    depends_on:
+      - agent
+      - registry-api
+
+volumes:
+  timescale_data:
+  clinical_data:
+  qdrant_data:
+  registry_data:
+  keycloak_data:

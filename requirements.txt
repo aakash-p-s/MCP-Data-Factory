@@ -17,7 +17,7 @@ qdrant-client
 sentence-transformers
 
 # Auth (JWT re-verification, Layer-2 RBAC)
-pyjwt
+pyjwt[crypto]
 
 # Resilience
 tenacity
@@ -27,3 +27,5 @@ uvicorn[standard]
 
 # Tests
 pytest
+pytest-asyncio
+httpx

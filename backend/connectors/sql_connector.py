@@ -16,6 +16,7 @@ import re
 import asyncpg
 
 from backend.shared.connector_base import Connector
+from backend.shared.self_healing import run_with_self_healing
 
 # query guardrail: block any write/DDL statement (§6.6)
 _FORBIDDEN = re.compile(
@@ -41,9 +42,15 @@ class SQLConnector(Connector):
         self.pool: asyncpg.Pool | None = None
 
     async def connect(self) -> None:
+        await run_with_self_healing(self._open_pool, reset=self._reset_pool)
+
+    async def _open_pool(self) -> None:
         if self.pool is None:
             self.pool = await asyncpg.create_pool(
                 self._dsn, min_size=self._min, max_size=self._max)
+
+    async def _reset_pool(self) -> None:
+        await self.close()
 
     async def auth(self) -> None:
         # credentials are carried in the DSN; nothing extra to do for Postgres.
@@ -51,6 +58,9 @@ class SQLConnector(Connector):
 
     async def schema(self) -> dict:
         """Introspect tables/columns from information_schema."""
+        return await run_with_self_healing(self._schema_once, reset=self._reset_pool)
+
+    async def _schema_once(self) -> dict:
         await self.connect()
         rows = await self.pool.fetch(
             """SELECT table_name, column_name, data_type
@@ -68,6 +78,10 @@ class SQLConnector(Connector):
 
         params = {"sql": "SELECT ... WHERE patient_id = $1", "args": [...]}
         """
+        return await run_with_self_healing(
+            lambda: self._query_once(params), reset=self._reset_pool)
+
+    async def _query_once(self, params: dict) -> list[dict]:
         sql = params["sql"]
         args = params.get("args", [])
         _assert_read_only(sql)

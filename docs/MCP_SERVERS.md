@@ -18,9 +18,9 @@ hardened template — only the domain, tools, connector, and storage differ.
 | Server | Tools | Scope | Kong route | Storage | FHIR resource | Status |
 | --- | --- | --- | --- | --- | --- | --- |
 | **vitals_trends** | `get_vitals_trend`, `compute_news2_score`, `list_abnormal_vitals` | `mcp.vitals.read` | `/mcp/clinical/vitals-trends/dev` | TimescaleDB | `Observation` | ✅ DB-backed |
-| **labs_diagnoses** | `get_lab_trend`, `get_active_diagnoses`, `get_diagnosis_history` | `mcp.labs.read` | `/mcp/clinical/labs-diagnoses/dev` | Postgres | `Observation`, `Condition` | ⏳ Jun 30 |
-| **medications_interactions** | `get_active_medications`, `check_drug_interactions`, `get_polypharmacy_risk` | `mcp.meds.read` | `/mcp/clinical/medications-interactions/dev` | Postgres | `MedicationStatement` | ⏳ Jul 1 |
-| **clinical_notes_search** | `semantic_search_notes`, `get_recent_notes`, `get_notes_by_type` | `mcp.notes.read` | `/mcp/clinical/clinical-notes-search/dev` | Qdrant | `DocumentReference` | ⏳ Jul 6 |
+| **labs_diagnoses** | `get_lab_trend`, `get_active_diagnoses`, `get_diagnosis_history` | `mcp.labs.read` | `/mcp/clinical/labs-diagnoses/dev` | Postgres | `Observation`, `Condition` | ✅ DB-backed |
+| **medications_interactions** | `get_active_medications`, `check_drug_interactions`, `get_polypharmacy_risk` | `mcp.meds.read` | `/mcp/clinical/medications-interactions/dev` | Postgres | `MedicationStatement` | ✅ DB-backed |
+| **clinical_notes_search** | `semantic_search_notes`, `get_recent_notes`, `get_notes_by_type` | `mcp.notes.read` | `/mcp/clinical/clinical-notes-search/dev` | Qdrant | `DocumentReference` | ✅ DB-backed |
 
 The three SQL servers share **`SQLConnector`**; `clinical_notes_search` uses **`VectorConnector`** —
 the same `Connector` interface, proving the architecture is source-agnostic.
@@ -33,7 +33,7 @@ Each server lives in `backend/servers/<domain>/`:
 
 ```
 backend/servers/vitals_trends/
-├── main.py            # FastAPI/MCP app: registers tools, ScopeGuard, transport security
+├── main.py            # FastMCP app + FixedCoreGuard + transport security
 ├── tools.py           # the tool functions: query the connector, FHIR-shape rows
 ├── news2.py           # domain logic (vitals only: NHS NEWS2 score)
 ├── blueprint.yaml     # the FROZEN contract (tools, scope, route, RBAC) — human-approval artifact
@@ -47,10 +47,14 @@ Shared, imported by every server (the **Fixed Core**, `backend/shared/`):
 | --- | --- |
 | `connector_base.py` | the `Connector` ABC (`connect/auth/schema/query`) every connector implements |
 | `embeddings.py` | single-source embedding model + Qdrant fingerprint (notes server) |
-| `auth.py` *(Jul 2)* | real JWT verify + group/scope RBAC |
-| `audit.py`, `cache.py`, `egress_guard.py`, `telemetry.py` *(Jul 2)* | hardening |
+| `auth.py` | JWT verify + group/scope RBAC (Layer 2) |
+| `audit.py` | structured audit + `purpose_of_access` enum |
+| `middleware.py` | shared `FixedCoreGuard` ASGI wrapper (replaces per-server ScopeGuard) |
+| `egress_guard.py` | locked connector DSN per server |
+| `cache.py` | 30s TTL decorator for read-heavy tools |
+| `self_healing.py` | tenacity retry + pool/client reset on transient errors |
 
-And the connectors (`backend/connectors/`): `sql_connector.py`, `vector_connector.py` *(Jul 6)*.
+And the connectors (`backend/connectors/`): `sql_connector.py`, `vector_connector.py`.
 
 ---
 
@@ -61,7 +65,7 @@ flowchart TB
     A[Agent / MCP client] -->|POST /mcp + Bearer JWT<br/>Accept: text/event-stream| G
 
     subgraph SERVER["vitals_trends server (uvicorn :8001)"]
-        G[ScopeGuard ASGI middleware] -->|path / or /health| H[JSON service summary]
+        G[FixedCoreGuard] -->|path / or /health| H[JSON service summary]
         G -->|token present, scp lacks scope| D["403 {error: forbidden,<br/>reason: missing scope ...}"]
         G -->|ok| M[FastMCP Streamable HTTP app]
         M --> T["tool fn (tools.py)<br/>get_vitals_trend / compute_news2_score / ..."]
@@ -74,8 +78,10 @@ flowchart TB
     M -->|SSE result| A
 ```
 
-- **ScopeGuard** (pure-ASGI, in `main.py`) runs first: serves `/` & `/health` summaries, emits
-  the exact **403 envelope** when a bearer token lacks the scope, otherwise passes through.
+- **FixedCoreGuard** (pure-ASGI, `backend/shared/middleware.py`) runs first: serves `/` & `/health`
+  summaries, verifies JWT via `auth.py`, enforces scope + group RBAC, audits auth decisions.
+  Missing/invalid token → **401**; wrong scope or role → **403** with explain-denial envelope.
+  Each tool call additionally audits PHI access via `audit_phi()` (reads `X-Purpose-Of-Access`).
 - **FastMCP** turns each `@mcp.tool()` function into a discoverable MCP tool (reads type hints
   for the input schema, docstring for the description).
 - **TransportSecuritySettings** allow-lists the `Host` header (so it works behind Kong without
@@ -93,7 +99,7 @@ flowchart TB
 3. **`tools.py`** — three async functions that query the connector and build FHIR `Observation`s.
    `hours` is windowed relative to the patient's latest reading (Synthea data is historical).
 4. **`main.py`** — creates `FastMCP("vitals_trends", transport_security=...)`, registers the three
-   tools (each delegates to `tools.py` with the connector), wraps the app in `ScopeGuard`.
+   tools (each delegates to `tools.py` with the locked connector), wraps in `FixedCoreGuard`.
 
 The Day-1 **stub** was the same `main.py` returning hardcoded FHIR; swapping in the connector
 kept tool names / scope / route / FHIR shape / 403 identical — so the agent never noticed.
@@ -102,11 +108,17 @@ kept tool names / scope / route / FHIR shape / 403 identical — so the agent ne
 
 ## Commands
 
-Run the server (data stores must be up — see [`INFRASTRUCTURE.md`](INFRASTRUCTURE.md)):
+Run a server (data stores must be up — see [`INFRASTRUCTURE.md`](INFRASTRUCTURE.md)):
+
 ```bash
-uv run python backend/servers/vitals_trends/main.py     # -> http://localhost:8001/mcp
+uv run python backend/servers/vitals_trends/main.py              # -> http://localhost:8001/mcp
+uv run python backend/servers/labs_diagnoses/main.py             # -> http://localhost:8002/mcp
+uv run python backend/servers/medications_interactions/main.py   # -> http://localhost:8003/mcp
+uv run python backend/servers/clinical_notes_search/main.py      # -> http://localhost:8004/mcp
 ```
-Banner: `[vitals_trends] DB-backed | MCP SDK 1.28.0 | health … | mcp … | scope=mcp.vitals.read`.
+
+Each banner confirms Fixed Core mode, MCP SDK version, health URL, scope, and Kong route.
+Notes server needs Qdrant populated first (`LOAD_NOTES=true` when running `load_patients.py`).
 
 Browser-friendly health summary (no MCP client needed):
 ```bash
@@ -143,13 +155,74 @@ Call **through Kong** (full path, needs a Keycloak token) — see [`INFRASTRUCTU
 
 ---
 
-## Adding the next server (labs/meds/notes)
+## How `labs_diagnoses` was built
 
-1. Copy `vitals_trends/` to `backend/servers/<domain>/`.
-2. Write `blueprint.yaml` with the domain's tools, scope, Kong route (from the contract).
-3. Write `tools.py` querying the right tables; build the right FHIR resource
-   (`Condition` for diagnoses, `MedicationStatement` for meds, `DocumentReference` for notes).
-4. SQL domains reuse `SQLConnector(CLINICAL_DB_URL)`; the notes server uses `VectorConnector`
-   (`from backend.shared.embeddings import embed, assert_model_matches, exclude_meta_filter`).
-5. Pick a port (8002/8003/8004), wire it into Kong's upstream, register in `registry-db`.
-6. Keep the **contract frozen** — tell Person B same-day if a tool name / scope / route changes.
+Same template as `vitals_trends`, but over **`CLINICAL_DB_URL`** (Postgres `:5434`):
+
+1. **`tools.py`** — three async functions querying `labs` and `diagnoses`; FHIR-shape as
+   `Observation` (labs) and `Condition` (diagnoses).
+2. **`main.py`** — `FastMCP("labs_diagnoses")`, registers tools, `FixedCoreGuard` with
+   `mcp.labs.read` and `ALLOWED_GROUPS = {grp-clinical-viewer, grp-physician}` (case-manager
+   denied per blueprint).
+3. **`blueprint.yaml`** — frozen contract; Kong route `/mcp/clinical/labs-diagnoses/dev`.
+
+Test the **403** path (case-manager group denied even with scope):
+```bash
+curl -s http://localhost:8002/mcp -X POST \
+  -H "Authorization: Bearer $(python3 -c "import jwt;print(jwt.encode({'scp':'mcp.labs.read','groups':['grp-case-manager']},'x'*32,algorithm='HS256'))")" \
+  -H "Accept: application/json, text/event-stream" -H "Content-Type: application/json" \
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}'
+# -> 403 role not permitted ...
+```
+
+---
+
+## How `medications_interactions` was built
+
+Same template, Postgres `:5434`, plus a curated **`interaction_rules`** reference table:
+
+1. **`infra/postgres/seed-interaction-rules.sql`** — six RxNorm pairs (e.g. lisinopril +
+   naproxen on `demo-patient-1`); auto-seeded on first Postgres init.
+2. **`interactions.py`** — `check_pairs()` queries rules symmetrically (unordered pairs).
+3. **`tools.py`** — `get_active_medications` → FHIR `MedicationStatement`;
+   `check_drug_interactions` → rule hits; `get_polypharmacy_risk` → 5+ active meds = elevated.
+4. **`main.py`** — scope `mcp.meds.read`, **`ALLOWED_GROUPS = {grp-physician}` only**
+   (clinical-viewer and case-manager denied — physician-only domain).
+
+> **Illustrative rule set only** — not a licensed clinical drug-interaction database.
+
+---
+
+## How `clinical_notes_search` was built
+
+The vector server proves the **same Connector interface** works for Qdrant:
+
+1. **`vector_connector.py`** — `VectorConnector(Connector)` over `AsyncQdrantClient`. URL fixed
+   at construction via `locked_connector_for()`. On connect, calls `assert_model_matches()` so
+   a loader/connector embedding mismatch crashes loudly.
+2. **`tools.py`** — three query modes via `conn.query()`:
+   - `search` — embed the query text, cosine similarity within `patient_id`
+   - `recent` — scroll + sort by `note_date` desc
+   - `by_type` — filter on `note_type` payload (e.g. `physician_note`)
+   FHIR-shape rows as `DocumentReference` (note text in `description` + `text`).
+3. **`main.py`** — scope `mcp.notes.read`, **`ALLOWED_GROUPS = {grp-physician, grp-case-manager}`**
+   (clinical-viewer denied per blueprint). `@cached(30)` on `get_recent_notes`.
+
+Test the **403** path (nurse denied notes):
+```bash
+curl -s http://localhost:8004/mcp -X POST \
+  -H "Authorization: Bearer $(python3 -c "import jwt;print(jwt.encode({'scp':'mcp.notes.read','groups':['grp-clinical-viewer']},'x'*32,algorithm='HS256'))")" \
+  -H "Accept: application/json, text/event-stream" -H "Content-Type: application/json" \
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}'
+# -> 403 role not permitted ...
+```
+
+---
+
+## Architecture note (SQL vs vector)
+
+Three domains use **`SQLConnector`** (parameterized SELECT over Postgres/TimescaleDB).
+`clinical_notes_search` uses **`VectorConnector`** (cosine similarity + payload scroll over Qdrant).
+Both implement the same `Connector` ABC — the agent sees identical MCP tool patterns; only the
+storage backend differs. Embedding model + collection name live in **`backend/shared/embeddings.py`**
+(single source of truth for loader and connector).

@@ -68,7 +68,7 @@ Pinned in [`requirements.txt`](../requirements.txt):
 | `qdrant-client` | Vector DB client (`clinical_notes_search`) |
 | `sentence-transformers` | Embeddings (`all-MiniLM-L6-v2`) |
 | `pyjwt` | JWT re-verification (Layer-2 RBAC) |
-| `tenacity` | Retry logic (self-healing) |
+| `self_healing.py` | tenacity retry + pool/client reset on transient backend errors |
 | `uvicorn[standard]` | ASGI server to run the FastAPI/MCP apps |
 | `pytest` | RBAC matrix + self-healing tests |
 
@@ -79,11 +79,12 @@ infra/
   synthea/      # load_patients.py, demo_patient_aliases.json
   postgres/     # init-*.sql schema files
 backend/
-  shared/       # connector_base.py, auth.py, audit.py, cache.py, egress_guard.py, ...
+  shared/       # connector_base.py, auth.py, audit.py, cache.py, egress_guard.py, self_healing.py, ...
   connectors/   # sql_connector.py, vector_connector.py
   servers/      # vitals_trends/, labs_diagnoses/, medications_interactions/, clinical_notes_search/
-  tests/        # test_rbac_matrix.py, test_self_healing.py
-docker-compose.data.yml   # TimescaleDB, Postgres, Qdrant, synthea-loader (Person A's half)
+  tests/        # test_rbac_matrix.py, test_fixed_core.py, test_self_healing.py
+docker-compose.yml          # unified stack (data + platform)
+docker-compose.data.yml     # data stores only (legacy split)
 ```
 
 ## Data Stores
@@ -92,9 +93,9 @@ Person A's half lives in [`docker-compose.data.yml`](../docker-compose.data.yml)
 (`restart: unless-stopped`, schemas auto-applied on first init, healthchecks).
 
 ```bash
-docker compose -f docker-compose.data.yml up -d          # start the 3 stores
-docker compose -f docker-compose.data.yml ps             # check status
-docker compose -f docker-compose.data.yml --profile tools up -d pgadmin   # optional UI
+docker compose up -d          # unified: data stores + platform
+docker compose ps
+docker compose --profile tools up -d pgadmin   # optional UI
 ```
 
 | Service | Container | Host port | Notes |
@@ -171,31 +172,39 @@ python3 -c "import json; print(json.load(open('infra/synthea/demo_patient_aliase
 
 - [x] **Phase 0** — repo bootstrap, `.env.example`, `requirements.txt`, uv 3.12 venv
 - [x] **Phase 1 (Thu Jun 25)** — 3 data stores up + schemas verified; `connector_base.py` ABC
-- [x] **Phase 2 (Fri Jun 26)** — Synthea loader; vitals=292, labs=6787, diagnoses=732, meds=1071; determinism verified
+- [x] **Phase 2 (Fri Jun 26)** — Synthea loader; 31 patients (seed 42, v4.0.0 jar); determinism verified
 - [x] **Phase 3 (Fri Jun 26)** — Day-1 stub server (`vitals_trends`) verified + handed to Person B
 - [x] **Mon Jun 29** — real `vitals_trends` server: `sql_connector.py`, `tools.py`, `news2.py` (live TimescaleDB)
 - [x] **Tue Jun 30** — `labs_diagnoses` server: `get_lab_trend`, `get_active_diagnoses`, `get_diagnosis_history` (live Postgres)
 - [x] **Wed Jul 1** — `medications_interactions` server: `get_active_medications`, `check_drug_interactions`, `get_polypharmacy_risk` (curated RxNorm rules)
-- [ ] **Thu Jul 2** — RBAC + audit (+purpose_of_access enum) + egress guard + cache across the 3 servers
+- [x] **Thu Jul 2** — Fixed Core across 3 servers: `auth.py`, `audit.py`, `egress_guard.py`, `cache.py`, shared `FixedCoreGuard`
+- [x] **Jul 6** — `clinical_notes_search` vector server (Qdrant, `:8004`)
+- [x] **Jul 7** — self-healing: `self_healing.py` + tenacity retries on SQL/Vector connectors
+- [x] **Jul 8** — unified `docker-compose.yml` (data + platform merge)
 
-### Day-1 Stub Server (`backend/servers/vitals_trends/`)
+## MCP Servers
 
-MCP server over Streamable HTTP with hardcoded FHIR — unblocks Person B before the real
-DB-backed server (Jun 29). Contract is **fixed** (see `blueprint.yaml`). Integration
-checklist for Person B: [`HANDOVER_PERSON_B.md`](../docs/HANDOVER_PERSON_B.md).
+Three SQL-backed servers are live; the vector server ships Jul 6. Each contract is **fixed**
+(see `blueprint.yaml` in each server directory). Integration checklist for Person B:
+[`HANDOVER_PERSON_B.md`](../docs/HANDOVER_PERSON_B.md).
 
 ```bash
-uv run python backend/servers/vitals_trends/main.py     # -> http://localhost:8001/mcp
+uv run python backend/servers/vitals_trends/main.py              # -> :8001/mcp
+uv run python backend/servers/labs_diagnoses/main.py             # -> :8002/mcp
+uv run python backend/servers/medications_interactions/main.py   # -> :8003/mcp
+uv run python backend/servers/clinical_notes_search/main.py      # -> :8004/mcp
 ```
 
-| Field | Value |
-| --- | --- |
-| MCP endpoint | `http://localhost:8001/mcp` |
-| Kong route | `/mcp/clinical/vitals-trends/dev` |
-| Tools | `get_vitals_trend`, `compute_news2_score`, `list_abnormal_vitals` |
-| Scope | `mcp.vitals.read` |
-| Success | FHIR R4 `Observation` |
-| Denial | `403 {"error":{"code":"forbidden","reason":"missing scope mcp.vitals.read"}}` |
+| Server | Port | Scope | Kong route | FHIR |
+| --- | --- | --- | --- | --- |
+| vitals_trends | 8001 | `mcp.vitals.read` | `/mcp/clinical/vitals-trends/dev` | `Observation` |
+| labs_diagnoses | 8002 | `mcp.labs.read` | `/mcp/clinical/labs-diagnoses/dev` | `Observation`, `Condition` |
+| medications_interactions | 8003 | `mcp.meds.read` | `/mcp/clinical/medications-interactions/dev` | `MedicationStatement` |
+| clinical_notes_search | 8004 | `mcp.notes.read` | `/mcp/clinical/clinical-notes-search/dev` | `DocumentReference` |
 
-A bearer token missing the scope gets the 403 envelope; no token is allowed (POC-friendly
-until Keycloak is wired). Signature verification + full RBAC land Jul 2.
+Notes server requires Qdrant populated (`LOAD_NOTES=true` when running `load_patients.py`).
+
+Missing scope or disallowed role → `403 {"error":{"code":"forbidden","reason":"..."}}`.
+No bearer token → `401` (unless `AUTH_ALLOW_ANONYMOUS=true` for local POC).
+Set `AUTH_VERIFY_SIGNATURE=true` once Keycloak tokens carry real scopes.
+See [`MCP_SERVERS.md`](../docs/MCP_SERVERS.md) for run/test examples.
