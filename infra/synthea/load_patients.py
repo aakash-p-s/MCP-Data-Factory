@@ -92,6 +92,10 @@ def run_synthea(patient_count: int = PATIENT_COUNT, seed: int = SEED) -> Path:
     print(f"[synthea] jar build={build} (pinned target {SYNTHEA_VERSION})")
     if build == "unknown":
         print("[synthea] WARNING: could not read jar build — cross-machine determinism unverifiable")
+    # Synthea APPENDS to output/ — clear it first so re-runs don't accumulate bundles
+    # from earlier runs (which would inflate the patient set and break determinism).
+    import shutil
+    shutil.rmtree(OUTPUT_DIR, ignore_errors=True)
     cmd = [
         "java", "-jar", str(JAR),
         "-p", str(patient_count),
