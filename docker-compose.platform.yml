@@ -1,4 +1,4 @@
-# Person B platform half — paths match repo layout from person-b branch upload.
+# Person B platform half — infra/ + backend/registry layout (canonical paths).
 # agent + frontend require ./agent and ./frontend (not uploaded yet) — profile: full
 # registry-db host port 5435 avoids clash with Person A TimescaleDB on 5433.
 
@@ -12,7 +12,7 @@ services:
       KC_BOOTSTRAP_ADMIN_PASSWORD: admin
       KC_DB: dev-file
     volumes:
-      - ./keycloak/realm-export.json:/opt/keycloak/data/import/realm-export.json
+      - ./infra/keycloak/realm-export.json:/opt/keycloak/data/import/realm-export.json
       - keycloak_data:/opt/keycloak/data
     ports:
       - "8080:8080"
@@ -33,7 +33,7 @@ services:
       KONG_ADMIN_ERROR_LOG: /dev/stderr
       KONG_ADMIN_LISTEN: "0.0.0.0:8001"
     volumes:
-      - ./kong/kong.yml:/etc/kong/kong.yml
+      - ./infra/kong/kong.yml:/etc/kong/kong.yml
     ports:
       - "8000:8000"
       - "8101:8001"
@@ -49,7 +49,7 @@ services:
       POSTGRES_PASSWORD: registry_pass
     volumes:
       - registry_data:/var/lib/postgresql/data
-      - ./init-registry-db.sql:/docker-entrypoint-initdb.d/init-registry-db.sql
+      - ./infra/postgres/init-registry-db.sql:/docker-entrypoint-initdb.d/init-registry-db.sql
     ports:
       - "5435:5432"
     healthcheck:
@@ -59,7 +59,7 @@ services:
       retries: 10
 
   registry-api:
-    build: ./registry
+    build: ./backend/registry
     environment:
       DATABASE_URL: postgresql+asyncpg://registry_user:registry_pass@registry-db:5432/registry
       KEYCLOAK_JWKS_URL: http://keycloak:8080/realms/patient-risk/protocol/openid-connect/certs

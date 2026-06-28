@@ -40,6 +40,16 @@ CLINICAL_DB_URL = os.environ["CLINICAL_DB_URL"]
 QDRANT_URL = os.getenv("QDRANT_URL", "http://localhost:6333")
 LOAD_NOTES = os.getenv("LOAD_NOTES", "false").lower() in ("1", "true", "yes")
 
+# PINNED Synthea version — do NOT use master-branch-latest: that tag is a MOVING target
+# (it always points at the newest master build), so two machines downloading it on
+# different days get different builds and therefore different patients even at the same
+# seed. A pinned release tag gives bit-identical patients across machines + time.
+SYNTHEA_VERSION = "v4.0.0"
+SYNTHEA_JAR_URL = (
+    f"https://github.com/synthetichealth/synthea/releases/download/"
+    f"{SYNTHEA_VERSION}/synthea-with-dependencies.jar"
+)
+
 SYNTHEA_DIR = Path(__file__).resolve().parent
 JAR = SYNTHEA_DIR / "synthea-with-dependencies.jar"
 OUTPUT_DIR = SYNTHEA_DIR / "output"
@@ -60,15 +70,28 @@ BP_PANEL_LOINC = "85354-9"
 
 
 # --- 1. generate -------------------------------------------------------------
+def _jar_build() -> str:
+    """Read the Synthea build id baked into the jar (version.txt)."""
+    import zipfile
+    try:
+        with zipfile.ZipFile(JAR) as z:
+            return z.read("version.txt").decode().strip()
+    except Exception:
+        return "unknown"
+
+
 def run_synthea(patient_count: int = PATIENT_COUNT, seed: int = SEED) -> Path:
     """Invoke the Synthea jar with a FIXED seed; return the FHIR output dir."""
     if not JAR.exists():
         sys.exit(
-            f"Synthea jar not found at {JAR}. Download it first:\n"
-            "  curl -sL -o infra/synthea/synthea-with-dependencies.jar \\\n"
-            "    https://github.com/synthetichealth/synthea/releases/download/"
-            "master-branch-latest/synthea-with-dependencies.jar"
+            f"Synthea jar not found at {JAR}. Download the PINNED version ({SYNTHEA_VERSION}):\n"
+            f"  curl -sL -o infra/synthea/synthea-with-dependencies.jar \\\n"
+            f"    {SYNTHEA_JAR_URL}"
         )
+    build = _jar_build()
+    print(f"[synthea] jar build={build} (pinned target {SYNTHEA_VERSION})")
+    if build == "unknown":
+        print("[synthea] WARNING: could not read jar build — cross-machine determinism unverifiable")
     cmd = [
         "java", "-jar", str(JAR),
         "-p", str(patient_count),

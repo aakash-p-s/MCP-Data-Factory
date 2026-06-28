@@ -2,8 +2,8 @@
 
 How to clone this repo on a **fresh machine** and bring the data layer + stub server up.
 Works for macOS/Linux (bash/zsh) and Windows (PowerShell). For a feature-by-feature
-reference of the backend itself, see [`backend/README.md`](backend/README.md); for the
-project overview and architecture, see [`README.md`](README.md).
+reference of the backend itself, see [`backend/README.md`](../backend/README.md); for the
+project overview and architecture, see [`README.md`](../README.md).
 
 > **Read this first — three things are NOT in the repo by design** and must be recreated locally:
 > 1. `.env` (gitignored — copy from `.env.example`)
@@ -79,12 +79,12 @@ Schemas auto-load on first init. To re-apply after editing a `.sql`:
 **macOS / Linux**
 ```bash
 curl -sL -o infra/synthea/synthea-with-dependencies.jar \
-  https://github.com/synthetichealth/synthea/releases/download/master-branch-latest/synthea-with-dependencies.jar
+  https://github.com/synthetichealth/synthea/releases/download/v4.0.0/synthea-with-dependencies.jar
 ```
 **Windows** (use `curl.exe`, not `curl`)
 ```powershell
 curl.exe -L -o infra/synthea/synthea-with-dependencies.jar `
-  https://github.com/synthetichealth/synthea/releases/download/master-branch-latest/synthea-with-dependencies.jar
+  https://github.com/synthetichealth/synthea/releases/download/v4.0.0/synthea-with-dependencies.jar
 ```
 Confirm it's ~180–190 MB (not a few KB) and runnable: `java -jar infra/synthea/synthea-with-dependencies.jar --help`.
 
@@ -169,7 +169,7 @@ curl.exe -s http://localhost:6333/collections/clinical_notes
 
 Browse payloads in the Qdrant dashboard: http://localhost:6333/dashboard
 
-> The embedding model is defined once in [`backend/shared/embeddings.py`](backend/shared/embeddings.py)
+> The embedding model is defined once in [`backend/shared/embeddings.py`](../backend/shared/embeddings.py)
 > (imported by both the loader and the future `vector_connector.py`), so the load-time and
 > query-time models can never drift. Nothing to configure — it travels with the repo.
 
@@ -181,6 +181,34 @@ uv run python backend/servers/vitals_trends/main.py     # -> http://localhost:80
 Banner confirms: `MCP SDK 1.28.0 | endpoint http://localhost:8001/mcp | scope=mcp.vitals.read
 | route=/mcp/clinical/vitals-trends/dev`. Tools: `get_vitals_trend`, `compute_news2_score`,
 `list_abnormal_vitals`. Missing-scope token → `403 {"error":{"code":"forbidden","reason":"missing scope mcp.vitals.read"}}`.
+
+---
+
+## Updating an existing clone (your other machine)
+
+Already set up once? Don't redo the above — just pull the latest. All config (embedding
+model pin, schemas, stub, platform files) travels with the repo.
+
+```bash
+git pull                                  # on the person-a/phase-2 branch
+```
+```powershell
+git pull                                  # Windows is identical
+```
+
+Only re-run a step if its *inputs* changed:
+- **Dependencies changed** (`requirements.txt`) → `uv pip install -r requirements.txt`
+- **Schema `.sql` changed** → `docker compose -f docker-compose.data.yml down -v && up -d`
+- **Loader changed / want fresh data** → re-run the loader (Section 5)
+
+Optional — make clinical notes searchable in Qdrant on this machine too (model auto-downloads):
+
+```bash
+LOAD_NOTES=true uv run python infra/synthea/load_patients.py            # macOS / Linux
+```
+```powershell
+$env:LOAD_NOTES="true"; uv run python infra/synthea/load_patients.py    # Windows
+```
 
 ---
 

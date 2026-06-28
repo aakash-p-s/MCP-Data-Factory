@@ -129,7 +129,7 @@ One-time: download the Synthea jar (~188 MB):
 
 ```bash
 curl -sL -o infra/synthea/synthea-with-dependencies.jar \
-  https://github.com/synthetichealth/synthea/releases/download/master-branch-latest/synthea-with-dependencies.jar
+  https://github.com/synthetichealth/synthea/releases/download/v4.0.0/synthea-with-dependencies.jar
 ```
 
 Run the loader (data stores must be up; ~2 min — generates + truncates + loads):
@@ -173,13 +173,14 @@ python3 -c "import json; print(json.load(open('infra/synthea/demo_patient_aliase
 - [x] **Phase 1 (Thu Jun 25)** — 3 data stores up + schemas verified; `connector_base.py` ABC
 - [x] **Phase 2 (Fri Jun 26)** — Synthea loader; vitals=292, labs=6787, diagnoses=732, meds=1071; determinism verified
 - [x] **Phase 3 (Fri Jun 26)** — Day-1 stub server (`vitals_trends`) verified + handed to Person B
-- [ ] **Mon Jun 29** — real `vitals_trends` server: `sql_connector.py`, `tools.py`, `news2.py`
+- [x] **Mon Jun 29** — real `vitals_trends` server: `sql_connector.py`, `tools.py`, `news2.py` (live TimescaleDB)
+- [ ] **Tue Jun 30** — `labs_diagnoses` server: `get_lab_trend`, `get_active_diagnoses`, `get_diagnosis_history`
 
 ### Day-1 Stub Server (`backend/servers/vitals_trends/`)
 
 MCP server over Streamable HTTP with hardcoded FHIR — unblocks Person B before the real
 DB-backed server (Jun 29). Contract is **fixed** (see `blueprint.yaml`). Integration
-checklist for Person B: [`HANDOVER_PERSON_B.md`](../HANDOVER_PERSON_B.md).
+checklist for Person B: [`HANDOVER_PERSON_B.md`](../docs/HANDOVER_PERSON_B.md).
 
 ```bash
 uv run python backend/servers/vitals_trends/main.py     # -> http://localhost:8001/mcp

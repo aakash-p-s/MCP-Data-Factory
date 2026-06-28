@@ -110,6 +110,11 @@ plugins:
       resource_attributes:
         service.name: kong-gateway
 
+# NOTE: this RSA public key MUST match the static signing key pinned in
+# infra/keycloak/realm-export.json (components.org.keycloak.keys.KeyProvider,
+# name=rsa-static). Both were generated as one keypair so Keycloak's tokens
+# validate here across every `down -v` / re-init. Regenerate BOTH together or
+# neither — never just one.
 consumers:
   - username: runtime-agent
     jwt_secrets:
@@ -117,11 +122,11 @@ consumers:
         algorithm: RS256
         rsa_public_key: |
           -----BEGIN PUBLIC KEY-----
-          MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAvgTs9Wjq3vEcUBnWODEV
-          8Qhauhasju4bdPymVlqti2KLWKyjk7zog3P6lrG8/W+6UsIcIzR2QOQdammxBaWu
-          C2TDaUvqYKwiYRsYkVhREdblGn9jZXGxppZO1J6HPnClQ+6uRsAvCLumyIa5k5ml
-          AtF5jEwhUPghTOowsPxsCGMG0cgOnX7Xf4InMTchBiTgUDJirdIQEezLXAt/ghoP
-          9sf9GrFKjJWfl1WPDFSltPZWhHiA/xXMHoEBPTSSaEcjtYNmyjxwTUVA9vEm7TX5
-          ardJM0X1oo03zyGx/JBWhqP/NzNl1nhCSa6qa++23l2Nl5n0W3TTC3lTTDN8QLzJ
-          RwIDAQAB
+          MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAjPO6D3AxKrsDP3vD6FQR
+          FA45sRvXrVm2FvtjuTX9RvDtwrojMZ7VeGn+lTQBaSW2os1MXb8Bh1a5J/owu80/
+          rqcn4Npd3f1JJk5SWi4xbO18e1IuRIqN+59e5bJpYB5tyUHZQZlgIGaLUUEIxAhB
+          QKLNjRyMoGRuCDiDuOBbvnGx8Pf8A3MgYYGHur/N1HK5GJN0KMxjzX7y+4ssJNEI
+          Hlt6wgp7ZTJzH+Tejg9PJbi/hvhLU3q6IKsDSBGUGezZgdx5DtLjl2b7qvcbEK6B
+          Gejy1FE0gcBfUuH8G+OXXqSgoBs5ZMVVdILTTGEECBoeUN0b+LalDJDyC5qjsPwf
+          UQIDAQAB
           -----END PUBLIC KEY-----

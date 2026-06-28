@@ -1,0 +1,165 @@
+# Infrastructure — Docker Services, Roles & Flow
+
+Everything runs as containers across **two compose files** (merged into one on Jul 8):
+
+- **`docker-compose.data.yml`** — Person A's half: the 3 data stores.
+- **`docker-compose.platform.yml`** — Person B's half: gateway, identity, registry, tracing.
+
+Companion: [`MCP_SERVERS.md`](MCP_SERVERS.md) (the servers that sit between Kong and the data).
+
+---
+
+## Service map
+
+| Service | Compose | Host port | Role | Config file |
+| --- | --- | --- | --- | --- |
+| **timescaledb-vitals** | data | 5433 | time-series store for vitals | `infra/postgres/init-timescale-vitals.sql` |
+| **postgres-clinical** | data | 5434 | labs, diagnoses, medications | `infra/postgres/init-labs-diagnoses.sql`, `init-medications.sql` |
+| **qdrant** | data | 6333 | vector store for clinical notes | (collection created by the loader) |
+| **pgadmin** | data | 5050 | browse the SQL DBs (optional) | — |
+| **keycloak** | platform | 8080 | identity provider — issues JWTs | `infra/keycloak/realm-export.json` |
+| **kong** | platform | 8000 (proxy) / 8101 (admin) | API gateway — Layer-1 auth, routing, rate-limit | `infra/kong/kong.yml` |
+| **registry-db** | platform | 5435 | control-plane source of truth (12 tables) | `infra/postgres/init-registry-db.sql` |
+| **registry-api** | platform | 8600 | reads/writes registry-db; token-protected | `backend/registry/` |
+| **jaeger** | platform | 16686 | distributed tracing UI | — |
+| *agent, frontend* | platform (`full`) | 8500, 3000 | Person B runtime/UI (dirs not uploaded yet) | — |
+
+---
+
+## How it fits together (runtime path)
+
+```mermaid
+flowchart LR
+    U([Clinician]) --> FE[frontend :3000<br/>NextAuth]
+    FE -->|login| KC[(keycloak :8080<br/>realm patient-risk)]
+    KC -->|signed JWT| FE
+    FE -->|Bearer JWT| AG[agent :8500<br/>LangGraph + MCP clients]
+    AG -->|/mcp/clinical/*/dev| KONG[kong :8000<br/>Layer-1 gateway]
+
+    KONG -->|validate JWT signature<br/>via pinned realm key<br/>rate-limit, route| V[vitals_trends :8001]
+    KONG -.-> L[labs :8002]
+    KONG -.-> M[meds :8003]
+    KONG -.-> N[notes :8004]
+
+    V --> TS[(timescaledb :5433)]
+    L --> PG[(postgres :5434)]
+    M --> PG
+    N --> QD[(qdrant :6333)]
+
+    AG -->|register / health| RA[registry-api :8600] --> RDB[(registry-db :5435)]
+    KONG -.OTel.-> J[jaeger :16686]
+```
+
+**Two security layers:** Kong is **Layer 1** (is the token *valid*? not over quota? route it).
+Each MCP server is **Layer 2** (does this token's `scp` allow *this tool*?). Both must pass.
+
+---
+
+## Data stores (Person A)
+
+### timescaledb-vitals — `:5433`
+TimescaleDB = PostgreSQL 16 + a time-series extension. The `vitals` table is a **hypertable**
+(auto-partitioned by time) so "last N hours" queries are fast. Read by `SQLConnector` via
+`VITALS_DB_URL`. Schema auto-loads on first container init.
+
+### postgres-clinical — `:5434`
+Plain PostgreSQL 16 holding **`labs`, `diagnoses`, `medications`, `interaction_rules`** in one
+`clinical` database. (Port is 5434 because 5432 was taken locally.) Read via `CLINICAL_DB_URL`.
+
+### qdrant — `:6333`
+Vector database for clinical notes. The loader embeds notes with `all-MiniLM-L6-v2` and upserts
+them into the `clinical_notes` collection (plus a fingerprint point so a model mismatch is caught
+loudly — see `backend/shared/embeddings.py`). Dashboard at http://localhost:6333/dashboard.
+
+```bash
+docker compose -f docker-compose.data.yml up -d
+docker compose -f docker-compose.data.yml ps
+docker exec timescaledb-vitals psql -U postgres -d vitals   -c "\dt"
+docker exec postgres-clinical  psql -U postgres -d clinical -c "\dt"
+```
+
+---
+
+## Platform services (Person B)
+
+### keycloak — `:8080` (identity provider)
+Issues OAuth2/OIDC JWTs for the realm **`patient-risk`** with 3 roles
+(`clinical-viewer`, `physician`, `case-manager`). Config is `infra/keycloak/realm-export.json`,
+imported on first start.
+
+> **Static signing key (fix applied):** the realm pins a **static RSA KeyProvider** (`rsa-static`)
+> so Keycloak signs with the same key across every re-init — otherwise Kong's pinned public key
+> goes stale and you get `401 Invalid signature`. The matching public key lives in `kong.yml`.
+> The two files must change together (a note in each says so).
+
+```bash
+# get a token
+curl -s -X POST http://localhost:8080/realms/patient-risk/protocol/openid-connect/token \
+  -d grant_type=client_credentials -d client_id=patient-risk-agent \
+  -d client_secret=agent-secret-change-in-prod
+```
+
+### kong — `:8000` proxy / `:8101` admin (API gateway, Layer 1)
+Declarative config `infra/kong/kong.yml` defines one **service + route per MCP server**. For each:
+- a **jwt** plugin validates the token signature against the realm key (`key_claim_name: iss`),
+- a **rate-limiting** plugin (60/min vitals & labs, 30/min meds & notes),
+- vitals also has a **request-transformer** rewriting the path to `/mcp` for the upstream.
+
+Kong reaches the host-run MCP servers via `host.docker.internal:<port>`.
+
+```bash
+curl -s http://localhost:8101/routes | python3 -m json.tool | grep '"paths"'   # loaded routes
+# tokenless call -> 401 (route wired + JWT enforced); unknown path -> 404
+```
+
+### registry-db — `:5435` (control plane)
+PostgreSQL holding the **12 control-plane tables** (`products`, `mcp_servers`, `tool_specs`,
+`rbac_mappings`, `gateway_routes`, `audit_events`, `health_checks`, …) — the system's source of
+truth for "what servers exist and how they're reached." Schema: `infra/postgres/init-registry-db.sql`.
+
+### registry-api — `:8600`
+FastAPI over registry-db (`backend/registry/`). `GET /servers`, `/audit`, etc. Its `auth.py`
+**requires a valid Keycloak token** on every request (non-anonymous) — `/docs` is open, `/servers`
+returns 401 without a token.
+
+### jaeger — `:16686`
+Receives OpenTelemetry traces (one trace id per question across all hops). UI at :16686.
+
+```bash
+docker compose -f docker-compose.platform.yml up -d        # keycloak, kong, registry-db, registry-api, jaeger
+docker compose -f docker-compose.platform.yml --profile full up -d   # + agent, frontend (when uploaded)
+```
+
+---
+
+## Full green-path test (token → Kong → server → FHIR)
+
+```bash
+# data stores + the vitals server (host)
+docker compose -f docker-compose.data.yml up -d
+uv run python backend/servers/vitals_trends/main.py &
+
+TOK=$(curl -s -X POST http://localhost:8080/realms/patient-risk/protocol/openid-connect/token \
+  -d grant_type=client_credentials -d client_id=patient-risk-agent \
+  -d client_secret=agent-secret-change-in-prod | python3 -c "import sys,json;print(json.load(sys.stdin)['access_token'])")
+
+curl -s -o /dev/null -w "%{http_code}\n" http://localhost:8000/mcp/clinical/vitals-trends/dev -X POST \
+  -H "Authorization: Bearer $TOK" -H "Accept: application/json, text/event-stream" \
+  -H "Content-Type: application/json" -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}'
+# -> 200  (200 means signature + host header + route all good)
+```
+
+## Re-initialising / resetting
+
+```bash
+# data: drop volumes to re-run schemas from scratch
+docker compose -f docker-compose.data.yml down -v && docker compose -f docker-compose.data.yml up -d
+
+# platform: re-import the Keycloak realm (e.g. after a realm-export.json change)
+docker compose -f docker-compose.platform.yml down
+docker volume rm data_factory_keycloak_data
+docker compose -f docker-compose.platform.yml up -d keycloak kong registry-db registry-api
+```
+
+> Port reference: data → 5433/5434/6333 (+5050); platform → 8080/8000/8101/5435/8600/16686;
+> MCP servers → 8001/8002/8003/8004. No host clashes between the two compose files.

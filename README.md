@@ -10,6 +10,14 @@ FHIR R4 patient data ([Synthea](https://github.com/synthetichealth/synthea)) —
 > See [`PRD Docs/`](PRD%20Docs/) for the full Product Requirements Documents. This README
 > summarizes the problem, the solution, and the end-to-end workflow.
 
+**Docs index** (all in [`docs/`](docs/)): [`IMPLEMENTATION.md`](docs/IMPLEMENTATION.md) (setup, any OS) ·
+[`MCP_SERVERS.md`](docs/MCP_SERVERS.md) (how each server is built) ·
+[`INFRASTRUCTURE.md`](docs/INFRASTRUCTURE.md) (Kong, Keycloak, databases) ·
+[`backend/README.md`](backend/README.md) (backend detail) ·
+[`CHANGELOG.md`](docs/CHANGELOG.md) (what changed + commands) ·
+[`PERSON_B_SYNC.md`](docs/PERSON_B_SYNC.md) (Person B: do-before-building checklist) ·
+[`HANDOVER_PERSON_B.md`](docs/HANDOVER_PERSON_B.md) (integration contract).
+
 ---
 
 ## Problem Statement
@@ -129,7 +137,7 @@ flowchart TB
 ## Quick Start (Person A — Data & Backend)
 
 > **Setting up on a fresh machine (macOS/Linux or Windows)?** Follow
-> **[`IMPLEMENTATION.md`](IMPLEMENTATION.md)** — the full clone-to-running guide with
+> **[`IMPLEMENTATION.md`](docs/IMPLEMENTATION.md)** — the full clone-to-running guide with
 > prerequisites, the `person-a/phase-2` branch checkout, and OS-specific commands.
 
 The minimal path from clone to populated data stores (details in
@@ -150,7 +158,7 @@ docker exec postgres-clinical  psql -U postgres -d clinical -c "\dt"
 
 # --- Phase 2: synthetic data (fixed seed) ----------------------------------
 curl -sL -o infra/synthea/synthea-with-dependencies.jar \
-  https://github.com/synthetichealth/synthea/releases/download/master-branch-latest/synthea-with-dependencies.jar
+  https://github.com/synthetichealth/synthea/releases/download/v4.0.0/synthea-with-dependencies.jar
 set -a; . ./.env; set +a
 uv run python infra/synthea/load_patients.py           # truncates + reseeds (reproducible)
 docker exec timescaledb-vitals psql -U postgres -d vitals -c "SELECT count(*) FROM vitals;"
@@ -170,11 +178,11 @@ uv run python backend/servers/vitals_trends/main.py    # -> http://localhost:800
 ```
 
 > Ports: TimescaleDB **5433**, Postgres **5434** (5432 was taken locally), Qdrant **6333**,
-> vitals_trends stub **8001**. **Browse / verify data:** [`DATA_CHECKING.md`](DATA_CHECKING.md)
+> vitals_trends stub **8001**. **Browse / verify data:** [`DATA_CHECKING.md`](docs/DATA_CHECKING.md)
 > (pgAdmin + Qdrant dashboard + SQL status queries).
 > **Clinical notes:** the `clinical_notes_search` MCP server is deferred to Jul 6, but you
 > can **load physician notes into Qdrant early** with `LOAD_NOTES=true` when running
-> `load_patients.py` (see [`IMPLEMENTATION.md`](IMPLEMENTATION.md) §5). **Why early?**
+> `load_patients.py` (see [`IMPLEMENTATION.md`](docs/IMPLEMENTATION.md) §5). **Why early?**
 > Without it, Qdrant stays empty while SQL has all structured data — early load fills the
 > fourth domain, lets you browse note text in the dashboard, and validates embeddings
 > before the Jul 6 search server. Browse at http://localhost:6333/dashboard.
@@ -227,10 +235,10 @@ patient-risk-intelligence/
 │   │   ├── egress_guard.py              [ ]  SSRF / egress lock
 │   │   └── cache.py                     [ ]  30s TTL cache
 │   ├── connectors/
-│   │   ├── sql_connector.py             [ ]  TimescaleDB/Postgres (Jun 29)
+│   │   ├── sql_connector.py             [x]  TimescaleDB/Postgres (asyncpg, read-only guard)
 │   │   └── vector_connector.py          [ ]  Qdrant (Jul 6)
 │   ├── servers/
-│   │   ├── vitals_trends/               [~]  STUB live (main.py, blueprint.yaml); real server Jun 29
+│   │   ├── vitals_trends/               [x]  DB-backed (main.py, tools.py, news2.py, blueprint.yaml)
 │   │   ├── labs_diagnoses/              [ ]  (Jun 30)
 │   │   ├── medications_interactions/    [ ]  + interactions.py (Jul 1)
 │   │   └── clinical_notes_search/       [ ]  vector server (Jul 6)

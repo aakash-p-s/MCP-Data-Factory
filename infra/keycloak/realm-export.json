@@ -9,7 +9,6 @@
   "resetPasswordAllowed": false,
   "editUsernameAllowed": false,
   "bruteForceProtected": false,
-
   "clients": [
     {
       "clientId": "patient-risk-agent",
@@ -17,16 +16,27 @@
       "enabled": true,
       "clientAuthenticatorType": "client-secret",
       "secret": "agent-secret-change-in-prod",
-      "redirectUris": ["http://localhost:3000/*"],
-      "webOrigins": ["http://localhost:3000"],
+      "redirectUris": [
+        "http://localhost:3000/*"
+      ],
+      "webOrigins": [
+        "http://localhost:3000"
+      ],
       "standardFlowEnabled": true,
       "implicitFlowEnabled": false,
       "directAccessGrantsEnabled": true,
       "serviceAccountsEnabled": true,
       "publicClient": false,
       "protocol": "openid-connect",
-      "defaultClientScopes": ["openid", "profile", "email", "roles"],
-      "optionalClientScopes": ["mcp-scopes"],
+      "defaultClientScopes": [
+        "openid",
+        "profile",
+        "email",
+        "roles"
+      ],
+      "optionalClientScopes": [
+        "mcp-scopes"
+      ],
       "protocolMappers": [
         {
           "name": "groups-mapper",
@@ -55,19 +65,19 @@
           }
         },
         {
-  "name": "oid-mapper",
-  "protocol": "openid-connect",
-  "protocolMapper": "oidc-usermodel-property-mapper",
-  "config": {
-    "user.info.token.claim": "true",
-    "userinfo.token.claim": "true",
-    "id.token.claim": "true",
-    "access.token.claim": "true",
-    "claim.name": "oid",
-    "jsonType.label": "String",
-    "user.attribute": "id"
-  }
-},
+          "name": "oid-mapper",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-property-mapper",
+          "config": {
+            "user.info.token.claim": "true",
+            "userinfo.token.claim": "true",
+            "id.token.claim": "true",
+            "access.token.claim": "true",
+            "claim.name": "oid",
+            "jsonType.label": "String",
+            "user.attribute": "id"
+          }
+        },
         {
           "name": "scp-mapper",
           "protocol": "openid-connect",
@@ -83,21 +93,29 @@
       ]
     }
   ],
-
   "clientScopes": [
     {
       "name": "mcp-scopes",
       "protocol": "openid-connect",
-      "attributes": { "include.in.token.scope": "true" }
+      "attributes": {
+        "include.in.token.scope": "true"
+      }
     }
   ],
-
   "groups": [
-    { "name": "grp-clinical-viewer", "path": "/grp-clinical-viewer" },
-    { "name": "grp-physician",       "path": "/grp-physician" },
-    { "name": "grp-case-manager",    "path": "/grp-case-manager" }
+    {
+      "name": "grp-clinical-viewer",
+      "path": "/grp-clinical-viewer"
+    },
+    {
+      "name": "grp-physician",
+      "path": "/grp-physician"
+    },
+    {
+      "name": "grp-case-manager",
+      "path": "/grp-case-manager"
+    }
   ],
-
   "users": [
     {
       "username": "nurse-test",
@@ -105,8 +123,16 @@
       "email": "nurse@test.com",
       "firstName": "Test",
       "lastName": "Nurse",
-      "credentials": [{ "type": "password", "value": "test123", "temporary": false }],
-      "groups": ["grp-clinical-viewer"]
+      "credentials": [
+        {
+          "type": "password",
+          "value": "test123",
+          "temporary": false
+        }
+      ],
+      "groups": [
+        "grp-clinical-viewer"
+      ]
     },
     {
       "username": "doctor-test",
@@ -114,8 +140,16 @@
       "email": "doctor@test.com",
       "firstName": "Test",
       "lastName": "Doctor",
-      "credentials": [{ "type": "password", "value": "test123", "temporary": false }],
-      "groups": ["grp-physician"]
+      "credentials": [
+        {
+          "type": "password",
+          "value": "test123",
+          "temporary": false
+        }
+      ],
+      "groups": [
+        "grp-physician"
+      ]
     },
     {
       "username": "casemanager-test",
@@ -123,8 +157,45 @@
       "email": "casemanager@test.com",
       "firstName": "Test",
       "lastName": "CaseManager",
-      "credentials": [{ "type": "password", "value": "test123", "temporary": false }],
-      "groups": ["grp-case-manager"]
+      "credentials": [
+        {
+          "type": "password",
+          "value": "test123",
+          "temporary": false
+        }
+      ],
+      "groups": [
+        "grp-case-manager"
+      ]
     }
-  ]
+  ],
+  "components": {
+    "org.keycloak.keys.KeyProvider": [
+      {
+        "name": "rsa-static",
+        "providerId": "rsa",
+        "subComponents": {},
+        "config": {
+          "priority": [
+            "200"
+          ],
+          "enabled": [
+            "true"
+          ],
+          "active": [
+            "true"
+          ],
+          "algorithm": [
+            "RS256"
+          ],
+          "privateKey": [
+            "MIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQCM87oPcDEquwM/e8PoVBEUDjmxG9etWbYW+2O5Nf1G8O3CuiMxntV4af6VNAFpJbaizUxdvwGHVrkn+jC7zT+upyfg2l3d/UkmTlJaLjFs7Xx7Ui5Eio37n17lsmlgHm3JQdlBmWAgZotRQQjECEFAos2NHIygZG4IOIO44Fu+cbHw9/wDcyBhgYe6v83UcrkYk3QozGPNfvL7iywk0QgeW3rCCntlMnMf5N6OD08luL+G+EtTerogqwNIEZQZ7NmB3HkO0uOXZvuq9xsQroEZ6PLUUTSBwF9S4fwb45depKCgGzlkxVV0gtNMYQQIGh5Q3Rv4tqUMkPILmqOw/B9RAgMBAAECggEABQRu/aCX5Qy+1wCdlS4a5Oy3ToMU26sufjJvVt1hkufw53/VnWBPra3eN1FTpIdh/fkSjEeIJlkze/h3fO19/d/q3W6Aei5LYou8Rp2cbX0MDSq8RWNsnh9kUu2Iu57RqyD6LhAODSrOFkCBop+MAEd05PgP15/2wuzaExeZBG+9MvMgFv8x63792raUd5yHIOB7p7QbSvpiDxLiBt9sObHg+y/HM1r4cEnjW2hbqmy9i/70pBjRoA/c+VrA7hs77cEMS/uHddzl4+I/fCNs8WG8lFTa8AJMGbJ/uYt4gRYJJOQi9WHAguJsy0qSTOZzGxgqNgMSC1YAGZE48lMYrQKBgQDFOkNL3j+LvZoHvcx3lyF3YV4WqygOOu3XmFFHvgxpGfuvr2xt1wNwWXWJEYLY3H5UGh+KIrzZqjRiG8TqlWEJyXjnZ7vocxE7YpkDH9ybP2BMsXVHgFWuWPhyGgp4XqyzkuuBU9ZFfSDy8mCL315Lv4sfZJbAwakMR5x5zosHxQKBgQC29GtTFJVe9TfZbyfThCifSEvGhYUPQp11lc9xFWuIB95tSi6EhIN0QjiGuHJspF03AVvohRWhjXiVnaTPZHO1lQuSHDhf8RY8J+RmCsK2WmmengCNzp8EtMcsKpJwiKLTvNsEviysywGVoT3L/B6+ipMcBrr/ta44p0y01BEmHQKBgHOSxMS8o/g7TvuiWSLrSQ0v3XbjLUHJfn6MH3UvBQ7Bzx8QaTWkfbtkcN+1hzuVWeHmvPyxhoD2oGOtaiMdDhQyH8taml6Ir1xhVtDh5uCCrufCRbt0lMDqGgyi/eezcvh369GJU1K9FIXJSpIsfpFc2SW4SC8ETQ+JF0S5p/cRAoGATjlhLguN9iTYtUH+gERwbfImXAI4qxarZlwgbtRevrHGm2ntS8GwxuONcaSpX+RC6sLM/jTw07s+RJI7pmTnyEqqwNUKEZNuE1hnIm4VZIxxvl0GFZuzh/qXcj3dkPoKzIdiCbwaM+M0kTp4xp/MsWFklsYV7EFM9XIqrOJDVs0CgYEAj1sRgCNfbgn5sZB/DnuFLhzMI7H9SIOBGWScADEukegc1qX9ZYYKB29NHekT1Hly+say+x/BuPPruYs9e1JkACxaNVngFcvKEhwCwI48P3AYdyA5V3ynV89fqyiOtOvlTBSFCRLx9v/CPkH+M5EHZPGsqw7CjHg1Mi6fBCBkBI8="
+          ],
+          "certificate": [
+            "MIIDDzCCAfegAwIBAgIUD32oDguDSWXgogWxzfxy/fX4l20wDQYJKoZIhvcNAQELBQAwFzEVMBMGA1UEAwwMcGF0aWVudC1yaXNrMB4XDTI2MDYyODA0NTYwOVoXDTM2MDYyNTA0NTYwOVowFzEVMBMGA1UEAwwMcGF0aWVudC1yaXNrMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAjPO6D3AxKrsDP3vD6FQRFA45sRvXrVm2FvtjuTX9RvDtwrojMZ7VeGn+lTQBaSW2os1MXb8Bh1a5J/owu80/rqcn4Npd3f1JJk5SWi4xbO18e1IuRIqN+59e5bJpYB5tyUHZQZlgIGaLUUEIxAhBQKLNjRyMoGRuCDiDuOBbvnGx8Pf8A3MgYYGHur/N1HK5GJN0KMxjzX7y+4ssJNEIHlt6wgp7ZTJzH+Tejg9PJbi/hvhLU3q6IKsDSBGUGezZgdx5DtLjl2b7qvcbEK6BGejy1FE0gcBfUuH8G+OXXqSgoBs5ZMVVdILTTGEECBoeUN0b+LalDJDyC5qjsPwfUQIDAQABo1MwUTAdBgNVHQ4EFgQUm7mMblPAHrFqVR1olZTDXHYGNlowHwYDVR0jBBgwFoAUm7mMblPAHrFqVR1olZTDXHYGNlowDwYDVR0TAQH/BAUwAwEB/zANBgkqhkiG9w0BAQsFAAOCAQEAbFQlI/r256Y/MB0RNXil6DonpU/nTEUWKFX4upCJBcj+LO/qSNNFB3wdbCar1hayNI8scyzQf/oG7KNvuUXLnczWK84R2NjdD2+6erz2KHAA7euy5C04QjFPjslWf4NmrwKbBunbU2ftPpi8eV5zsJjnDJ3N27MXnXEpkEKhFYUZp0yuqbPs/E4kApq2BpHjcTiaugitwOb/qtiThGmyf05s2/DsVaLZF+464B+fwwIur6dtUW8o3AIi4i0SqXDopRsRBTgW1Cyj2kkwUntU9DAVznmHCxJ2RyyUpejXW7X/lIjOxzl/uHoIBOOGvIX95lWe+mCleNvgxmx7Ibm3BQ=="
+          ]
+        }
+      }
+    ]
+  }
 }

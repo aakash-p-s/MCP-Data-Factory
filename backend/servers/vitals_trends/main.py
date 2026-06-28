@@ -1,7 +1,6 @@
-"""vitals_trends — DAY-1 STUB SERVER (Person A PRD §6.1).
+"""vitals_trends — MCP server (Codebase PRD §5.4). DB-backed as of Jun 29.
 
-Person B's Runtime Agent work is blocked without this. The contract here is FIXED
-(Codebase PRD §6.2 / §6.5):
+The contract is FIXED and UNCHANGED from the Day-1 stub (§6.2 / §6.5):
 
     tools : get_vitals_trend, compute_news2_score, list_abnormal_vitals
     scope : mcp.vitals.read
@@ -9,12 +8,12 @@ Person B's Runtime Agent work is blocked without this. The contract here is FIXE
     ok    : FHIR R4 Observation JSON
     deny  : HTTP 403 {"error":{"code":"forbidden","reason":"missing scope mcp.vitals.read"}}
 
-"Fake data, real shape." Everything returned here is HARDCODED — no DB. The real
-DB-backed server replaces this on Jun 29; tool names/shape will NOT change.
+Tools now query live TimescaleDB via SQLConnector (tools.py) and FHIR-shape the rows —
+the stub's hardcoded data is gone, but tool names + shapes are identical, so the swap is
+invisible to Person B's agent.
 
 Real JWT signature verification + full group/scope RBAC land Jul 2 (backend/shared/auth.py).
-For the stub: a request WITH a bearer token missing the scope gets the 403 envelope;
-a request with no token is allowed (so Person B can integrate before Keycloak is wired).
+For now: a bearer token missing the scope gets the 403 envelope; no token is allowed.
 
 Run:  uv run python backend/servers/vitals_trends/main.py   # -> http://localhost:8001/mcp
 """
@@ -23,74 +22,59 @@ from __future__ import annotations
 
 import json
 import os
+import sys
+from pathlib import Path
 
 import jwt
 from mcp.server.fastmcp import FastMCP
+from mcp.server.transport_security import TransportSecuritySettings
+
+# repo root on sys.path so `backend.*` imports resolve when run as a script
+sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
+from backend.connectors.sql_connector import SQLConnector  # noqa: E402
+from backend.servers.vitals_trends import tools  # noqa: E402
 
 PORT = int(os.getenv("VITALS_PORT", "8001"))
 REQUIRED_SCOPE = "mcp.vitals.read"
+VITALS_DB_URL = os.environ.get(
+    "VITALS_DB_URL", "postgresql://postgres:changeme@localhost:5433/vitals")
 
-mcp = FastMCP("vitals_trends", stateless_http=True)
+# MCP DNS-rebinding protection rejects any Host header not in this list. Behind Kong
+# the forwarded Host is the upstream (e.g. host.docker.internal:8001), so allow-list the
+# known hosts instead of disabling protection. Extra hosts via ALLOWED_HOSTS (comma-sep).
+_default_hosts = [f"localhost:{PORT}", f"127.0.0.1:{PORT}", f"host.docker.internal:{PORT}",
+                  "localhost", "127.0.0.1", "host.docker.internal"]
+_extra_hosts = [h.strip() for h in os.getenv("ALLOWED_HOSTS", "").split(",") if h.strip()]
+_transport_security = TransportSecuritySettings(
+    enable_dns_rebinding_protection=True,
+    allowed_hosts=_default_hosts + _extra_hosts,
+    allowed_origins=["*"],
+)
 
-
-# --- FHIR helper (inlined for the stub; shared fhir_shape.py arrives later) ---
-def _observation(patient_id: str, loinc: str, display: str, value, unit: str,
-                 ts: str, interpretation: str | None = None) -> dict:
-    obs = {
-        "resourceType": "Observation",
-        "status": "final",
-        "category": [{"coding": [{
-            "system": "http://terminology.hl7.org/CodeSystem/observation-category",
-            "code": "vital-signs", "display": "Vital Signs"}]}],
-        "code": {"coding": [{"system": "http://loinc.org", "code": loinc,
-                             "display": display}], "text": display},
-        "subject": {"reference": f"Patient/{patient_id}"},
-        "effectiveDateTime": ts,
-        "valueQuantity": {"value": value, "unit": unit,
-                          "system": "http://unitsofmeasure.org", "code": unit},
-    }
-    if interpretation:
-        obs["interpretation"] = [{"coding": [{
-            "system": "http://terminology.hl7.org/CodeSystem/v3-ObservationInterpretation",
-            "code": interpretation}]}]
-    return obs
+mcp = FastMCP("vitals_trends", stateless_http=True, transport_security=_transport_security)
 
 
-# --- tools (hardcoded; real tool names + real FHIR shape) ---------------------
+# connector bound to the vitals DB at construction (egress-guard intent)
+_conn = SQLConnector(VITALS_DB_URL)
+
+
+# --- tools (DB-backed via SQLConnector; SAME names/shape as the Day-1 stub) ----
 @mcp.tool()
-def get_vitals_trend(patient_id: str, hours: int = 24) -> list[dict]:
-    """Recent vital-sign Observations for a patient (STUB: hardcoded)."""
-    return [
-        _observation(patient_id, "8867-4", "Heart rate", 88, "/min", "2026-06-26T08:00:00Z"),
-        _observation(patient_id, "8867-4", "Heart rate", 95, "/min", "2026-06-26T12:00:00Z"),
-        _observation(patient_id, "9279-1", "Respiratory rate", 20, "/min", "2026-06-26T12:00:00Z"),
-        _observation(patient_id, "2708-6", "Oxygen saturation", 94, "%", "2026-06-26T12:00:00Z"),
-        _observation(patient_id, "8480-6", "Systolic blood pressure", 132, "mm[Hg]", "2026-06-26T12:00:00Z"),
-    ]
+async def get_vitals_trend(patient_id: str, hours: int = 24) -> list[dict]:
+    """Recent vital-sign Observations for a patient (live TimescaleDB)."""
+    return await tools.get_vitals_trend(_conn, patient_id, hours)
 
 
 @mcp.tool()
-def compute_news2_score(patient_id: str) -> dict:
-    """NEWS2 deterioration score + risk band (STUB: hardcoded)."""
-    return {
-        "patient_id": patient_id,
-        "news2_score": 6,
-        "risk_band": "medium",
-        "components": {"resp_rate": 2, "spo2": 2, "temperature": 0,
-                       "systolic_bp": 1, "heart_rate": 1, "consciousness": 0},
-        "note": "STUB — fixed score; real NEWS2 computed from vitals on Jun 29",
-    }
+async def compute_news2_score(patient_id: str) -> dict:
+    """NEWS2 deterioration score + risk band from the latest vitals (NHS algorithm)."""
+    return await tools.compute_news2_score(_conn, patient_id)
 
 
 @mcp.tool()
-def list_abnormal_vitals(patient_id: str, hours: int = 24) -> list[dict]:
-    """Vital-sign Observations outside normal range (STUB: hardcoded)."""
-    return [
-        _observation(patient_id, "2708-6", "Oxygen saturation", 94, "%",
-                     "2026-06-26T12:00:00Z", interpretation="L"),
-        _observation(patient_id, "9279-1", "Respiratory rate", 22, "/min",
-                     "2026-06-26T12:00:00Z", interpretation="H"),
-    ]
+async def list_abnormal_vitals(patient_id: str, hours: int = 24) -> list[dict]:
+    """Vital-sign Observations outside the normal range (live), flagged H/L."""
+    return await tools.list_abnormal_vitals(_conn, patient_id, hours)
 
 
 # --- Layer-2 scope guard (ASGI; emits the exact 403 envelope) -----------------
@@ -98,7 +82,7 @@ def _service_info(port: int) -> dict:
     return {
         "service": "vitals_trends",
         "status": "ok",
-        "stub": True,
+        "stub": False,
         "mcp_endpoint": f"http://localhost:{port}/mcp",
         "transport": "streamable-http",
         "scope": REQUIRED_SCOPE,
@@ -181,7 +165,7 @@ if __name__ == "__main__":
         mcp_version = version("mcp")          # the SDK has no module __version__
     except PackageNotFoundError:
         mcp_version = "unknown"
-    print(f"[vitals_trends STUB] MCP SDK {mcp_version} "
+    print(f"[vitals_trends] DB-backed | MCP SDK {mcp_version} "
           f"| health http://localhost:{PORT}/ "
           f"| mcp http://localhost:{PORT}/mcp "
           f"| scope={REQUIRED_SCOPE} | route=/mcp/clinical/vitals-trends/dev",
