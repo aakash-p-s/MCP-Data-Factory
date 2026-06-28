@@ -7,6 +7,10 @@ Person B owns `docker-compose.platform.yml`, auth, gateway, registry, frontend, 
 For Person A setup, see [`IMPLEMENTATION.md`](IMPLEMENTATION.md). For architecture, see
 [`README.md`](README.md).
 
+> **Before you build:** run the sync checklist in [`PERSON_B_SYNC.md`](PERSON_B_SYNC.md)
+> (re-download Synthea v4.0.0, re-init Keycloak for the static key, add the `scp` scope
+> mapping). See [`CHANGELOG.md`](CHANGELOG.md) for the exact command changes.
+
 > **Branch:** clone and track **`person-a/phase-2`** — stub + data pipeline live there.
 > **Formal compose merge:** Jul 8 (`docker-compose.data.yml` + `docker-compose.platform.yml`).
 

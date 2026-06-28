@@ -10,6 +10,12 @@ FHIR R4 patient data ([Synthea](https://github.com/synthetichealth/synthea)) —
 > See [`PRD Docs/`](PRD%20Docs/) for the full Product Requirements Documents. This README
 > summarizes the problem, the solution, and the end-to-end workflow.
 
+**Docs index:** [`IMPLEMENTATION.md`](IMPLEMENTATION.md) (setup, any OS) ·
+[`backend/README.md`](backend/README.md) (backend detail) ·
+[`CHANGELOG.md`](CHANGELOG.md) (what changed + commands) ·
+[`PERSON_B_SYNC.md`](PERSON_B_SYNC.md) (Person B: do-before-building checklist) ·
+[`HANDOVER_PERSON_B.md`](HANDOVER_PERSON_B.md) (integration contract).
+
 ---
 
 ## Problem Statement
