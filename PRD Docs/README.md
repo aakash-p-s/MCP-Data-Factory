@@ -40,10 +40,21 @@ Aligned with **PersonA PRD** + **Codebase PRD §5–7** and [`Person_A_Tasks.xls
 | **Fixed Core (optional PRD)** | `telemetry.py`, `tool_trust.py`, `usage_log.py`, `fhir_shape.py` not shipped |
 | **Jul 9 demo** | Final fixes + live demo support |
 
-### Person B (not Person A)
+### Person B (not Person A — builds next)
 
-Keycloak `scp`/`groups[]` mappers, runtime agent, frontend, onboarding agent — see
-[`docs/HANDOVER_PERSON_B.md`](../docs/HANDOVER_PERSON_B.md).
+| Person B delivers | See |
+| --- | --- |
+| Keycloak `scp`/`groups[]` mappers, real JWTs | [`docs/PERSON_B_SYNC.md`](../docs/PERSON_B_SYNC.md) §6 |
+| Kong → `:8001–8004` upstreams | [`docs/HANDOVER_PERSON_B.md`](../docs/HANDOVER_PERSON_B.md) |
+| Runtime agent `:8500`, frontend `:3000` | Person B PRD; `agent/` + `frontend/` dirs TBD |
+| Onboarding agent | Later sprint |
+
+**Repo:** https://github.com/aakash-p-s/MCP-Data-Factory — branch `person-a/phase-2` and `main` (merged Jun 28, 2026).
+
+### Jul 9 (Person A — support only)
+
+Live demo support: keep `docker compose up -d` + `bash scripts/start_mcp_servers.sh` running;
+fix integration bugs; no new scope unless agreed.
 
 ---
 

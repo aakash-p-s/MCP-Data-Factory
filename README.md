@@ -461,7 +461,8 @@ curl -s http://localhost:6333/collections/clinical_notes | python3 -m json.tool 
 cat infra/synthea/demo_patient_aliases.json | head -5
 ```
 
-Use `demo-patient-1` (and siblings) in tool calls — they map to stable Synthea UUIDs (`SYNTHEA_SEED=42`).
+Use **`demo-patient-1` UUID** (not the alias string) in direct MCP tool calls — see
+[Person A complete — what happens next](#person-a-complete--what-happens-next).
 
 ### Step 3 — Browse data in the browser (optional)
 
@@ -529,15 +530,18 @@ curl -s -X POST http://localhost:8001/mcp \
   -H "Accept: application/json, text/event-stream" \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer $TOKEN" \
-  -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"get_vitals_trend","arguments":{"patient_id":"demo-patient-1","hours":24}}}'
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"get_vitals_trend","arguments":{"patient_id":"080b069b-5108-46b6-ecef-6aacd3b9ef3f","hours":24}}}'
 ```
+
+Get UUID: `python3 -c "import json; print(json.load(open('infra/synthea/demo_patient_aliases.json'))['demo-patient-1'])"`
 
 Repeat on `:8002` (labs), `:8003` (meds), `:8004` (notes) with the matching tool names.
 
 ### Step 8 — Stop when done
 
 - MCP servers: `Ctrl+C` in Terminal 1
-- Docker (optional): `docker compose down`
+- Docker: `docker compose down` (volumes kept — data persists)
+- If pgAdmin was started: `docker compose --profile tools down` (otherwise network may stay in use)
 
 ### Quick reference
 
@@ -652,6 +656,88 @@ MCP-Data-Factory/
 | RBAC matrix tests (4×3 HTTP + auth engine) | Done — **62 pytest passing** |
 | MCP Inspector smoke | Done — `scripts/mcp_inspector_smoke.py` |
 | Jul 9 demo / optional PRD modules | Open — `telemetry.py`, `tool_trust.py`, `usage_log.py`, `fhir_shape.py` |
+
+---
+
+## Person A complete — what happens next
+
+**Status (Jun 28, 2026):** Person A sprint is **done** (10/11 tasks in
+[`Person_A_Tasks.xlsx`](Person_A_Tasks.xlsx)). Code is on GitHub:
+[`person-a/phase-2`](https://github.com/aakash-p-s/MCP-Data-Factory/tree/person-a/phase-2)
+and merged into [`main`](https://github.com/aakash-p-s/MCP-Data-Factory).
+
+**Verified acceptance:** 62 pytest · MCP Inspector 4/4 · pre-push verify 14/14 · live FHIR
+tool calls on all four servers.
+
+### Still open (Person A — Jul 9 only)
+
+- **Live demo support** — keep servers running when Person B integrates; fix integration bugs
+  if contracts break (no new features unless agreed).
+- **Optional PRD modules** — `telemetry.py`, `tool_trust.py`, `usage_log.py`, `fhir_shape.py`
+  (deferred; not blocking handoff).
+
+### Person B builds next (not Person A)
+
+| Deliverable | Port | Owner |
+| --- | --- | --- |
+| Keycloak `scp` + `groups[]` mappers | 8080 | Person B |
+| Kong → MCP upstream wiring | 8000 | Person B |
+| Runtime agent (LangGraph + 4 MCP clients) | 8500 | Person B |
+| Frontend (Next.js + CopilotKit + NextAuth) | 3000 | Person B |
+| Onboarding agent (build-time) | — | Person B (later) |
+
+Person B starts with [`docs/PERSON_B_SYNC.md`](docs/PERSON_B_SYNC.md) then
+[`docs/HANDOVER_PERSON_B.md`](docs/HANDOVER_PERSON_B.md).
+
+### What Person A must keep available for integration
+
+When Person B is ready, Person A runs:
+
+```bash
+docker compose up -d
+bash scripts/start_mcp_servers.sh    # :8001–8004 on host
+```
+
+Person B tests via **Kong** (`:8000`) and the **agent/frontend** — not direct `:8001` curls.
+
+### Demo patient — important for tool calls
+
+Friendly aliases (`demo-patient-1`) live in
+[`infra/synthea/demo_patient_aliases.json`](infra/synthea/demo_patient_aliases.json).
+**MCP tools query the DB by UUID**, not alias:
+
+| Alias | UUID (use in direct MCP `patient_id`) |
+| --- | --- |
+| `demo-patient-1` | `080b069b-5108-46b6-ecef-6aacd3b9ef3f` |
+
+Person B's agent should **resolve alias → UUID** before calling tools. Direct curl without
+that mapping returns empty results for SQL/Qdrant lookups.
+
+**Demo highlights for `demo-patient-1`:** hypertension, IHD, hyperlipidemia; meds include
+lisinopril + naproxen (interaction rule in DB).
+
+### Clinical notes in Qdrant
+
+If `get_recent_notes` returns empty for a patient who has a `.txt` file under
+`infra/synthea/output/notes/`, reload embeddings **without** truncating SQL:
+
+```bash
+LOAD_NOTES=true uv run python -c "
+from pathlib import Path
+from infra.synthea.load_patients import embed_and_load_notes
+embed_and_load_notes(Path('infra/synthea/output/fhir'))
+"
+```
+
+### Docker shutdown notes
+
+```bash
+docker compose down              # stops main stack; keeps volumes (data safe)
+docker compose --profile tools down   # also stops pgAdmin (:5050) if it was started
+```
+
+If you see `Network data_factory_default Resource is still in use`, **pgAdmin** is usually
+still running — use `--profile tools down` above.
 
 > **Deviation from PRD §5.1.2 (intentional):** the PRD says to pin
 > `all-MiniLM-L6-v2` *inside both* `load_patients.py` and `vector_connector.py`. We instead
