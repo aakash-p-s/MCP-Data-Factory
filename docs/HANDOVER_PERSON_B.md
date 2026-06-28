@@ -12,8 +12,58 @@ For Person A setup, see [`IMPLEMENTATION.md`](IMPLEMENTATION.md). For architectu
 > (re-download Synthea v4.0.0, re-init Keycloak for the static key, add the `scp` scope
 > mapping). See [`CHANGELOG.md`](CHANGELOG.md) for the exact command changes.
 
-> **Branch:** clone and track **`person-a/phase-2`** — data pipeline + all four MCP servers there.
-> **Formal compose merge:** Jul 8 (`docker-compose.data.yml` + `docker-compose.platform.yml`).
+> **Branch:** clone **`main`** or **`person-a/phase-2`** — both contain the full Person A delivery
+> (merged Jun 28, 2026). Repo: https://github.com/aakash-p-s/MCP-Data-Factory
+> **Formal compose merge:** Jul 8 — use unified [`docker-compose.yml`](../docker-compose.yml).
+
+---
+
+## Person A delivery complete (Jun 28, 2026)
+
+Person A's sprint is **done**. Acceptance verified:
+
+| Check | Result |
+| --- | --- |
+| 4 MCP servers (:8001–8004, 12 tools, Fixed Core) | Live |
+| RBAC + MCP Inspector tests | 62 pytest · 4/4 smoke · 14/14 pre-push verify |
+| Git | Pushed to `person-a/phase-2` + merged to `main` |
+
+**Person A keeps running for integration:**
+
+```bash
+docker compose up -d
+bash scripts/start_mcp_servers.sh
+```
+
+**Person B builds next:** Keycloak scope/group mappers → Kong upstreams → runtime agent
+(`:8500`) → frontend (`:3000`). Start with [`PERSON_B_SYNC.md`](PERSON_B_SYNC.md).
+
+### Demo patient (direct MCP calls)
+
+MCP tools expect the **Synthea UUID**, not the friendly alias. Resolve via
+[`demo_patient_aliases.json`](../infra/synthea/demo_patient_aliases.json):
+
+| Alias | UUID |
+| --- | --- |
+| `demo-patient-1` | `080b069b-5108-46b6-ecef-6aacd3b9ef3f` |
+
+Person B's agent should map `demo-patient-1` → UUID before tool calls.
+
+### Notes server — Qdrant reload
+
+If `get_recent_notes` is empty but note `.txt` files exist, reload embeddings only:
+
+```bash
+LOAD_NOTES=true uv run python -c "
+from pathlib import Path
+from infra.synthea.load_patients import embed_and_load_notes
+embed_and_load_notes(Path('infra/synthea/output/fhir'))
+"
+```
+
+### Jul 9 — Person A role
+
+Demo **support** only (servers up, contract-stable fixes). No new Person A features unless agreed.
 
 ---
 
@@ -246,7 +296,9 @@ Complete before calling integration "done":
 | **Done** | Three DB-backed SQL servers live (`vitals_trends`, `labs_diagnoses`, `medications_interactions`) — same contracts, no agent/Kong URL changes from stub era. |
 | **Jul 2** | Fixed Core live: shared auth/audit/egress/cache; Bearer required by default. Person B wires Keycloak `scp` + `groups[]`, then flips `AUTH_VERIFY_SIGNATURE=true`. |
 | **Jul 6** | `clinical_notes_search` vector server live on :8004 (Qdrant + embeddings). |
-| **Jul 8** | **Done** — unified `docker-compose.yml`; `docker compose up -d` replaces two-file workflow. |
+| **Jul 8** | **Done** — unified `docker-compose.yml`; MCP Inspector + full 4×3 RBAC re-verify. |
+| **Jun 28** | **Done** — pushed to GitHub (`person-a/phase-2` + `main`); Person A handoff complete. |
+| **Jul 9** | Person A **demo support** only — keep servers running; Person B runs integrated demo. |
 
 ### Person A — pull platform config locally
 
@@ -288,4 +340,12 @@ Split compose files still work if you only need half the stack:
 
 ## 11. One-line handoff message (copy/paste)
 
-> Clone `person-a/phase-2`. Run `docker-compose.data.yml` + the three MCP servers on :8001–8003. Point Kong upstreams for `/mcp/clinical/{vitals-trends,labs-diagnoses,medications-interactions}/dev` at `host.docker.internal:<port>`. MCP endpoint is `/mcp` with `Accept: application/json, text/event-stream`. Contracts are in each server's `blueprint.yaml` — do not change tool names, scopes, or routes. Test with `demo-patient-1` from `demo_patient_aliases.json`. Push `docker-compose.platform.yml` to `person-b/*` when Kong routing works; full compose merge on Jul 8.
+> Person A is **done** (Jun 28, 2026). Clone `main` or `person-a/phase-2` from
+> https://github.com/aakash-p-s/MCP-Data-Factory. Run `docker compose up -d` then
+> `bash scripts/start_mcp_servers.sh` (:8001–8004 on host). Point Kong upstreams for
+> `/mcp/clinical/{vitals-trends,labs-diagnoses,medications-interactions,clinical-notes-search}/dev`
+> at `host.docker.internal:<port>`. MCP endpoint `/mcp`, header
+> `Accept: application/json, text/event-stream`. Contracts frozen in each `blueprint.yaml`.
+> Tool calls need patient **UUID** from `demo_patient_aliases.json` (e.g. demo-patient-1 →
+> `080b069b-5108-46b6-ecef-6aacd3b9ef3f`). Person B: wire Keycloak `scp`/`groups[]`, build
+> agent (:8500) + frontend (:3000). See `PERSON_B_SYNC.md`.

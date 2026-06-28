@@ -6,6 +6,25 @@ for everyone are called out so Person B / other machines can stay in sync. See
 
 ---
 
+## 2026-06-28 — Person A handoff complete (docs + GitHub)
+
+### Delivery status
+- Person A sprint **done** (10/11 tasks; Jul 9 = demo support only).
+- Pushed to **`person-a/phase-2`** and merged to **`main`** on
+  https://github.com/aakash-p-s/MCP-Data-Factory
+
+### Documentation
+- **README.md** — Person A complete / what happens next; demo patient UUID; Qdrant reload; Docker shutdown (pgAdmin profile).
+- **HANDOVER_PERSON_B.md** — delivery complete section; updated one-line handoff.
+- **PERSON_B_SYNC.md** — Person A status banner; clone step; Qdrant notes reload; Person B build checklist.
+- **PRD Docs/README.md** — Person B next steps + Jul 9 support role.
+
+### Operational notes (for demos)
+- MCP `patient_id` must be **Synthea UUID** (resolve `demo-patient-1` via `demo_patient_aliases.json`).
+- `docker compose --profile tools down` stops pgAdmin when network stays in use after `docker compose down`.
+
+---
+
 ## 2026-07-08 — MCP Inspector + full RBAC matrix (Jul 3/8 acceptance)
 
 ### HTTP-level RBAC matrix

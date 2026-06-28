@@ -1,15 +1,27 @@
 # Person B — Sync Checklist (do this BEFORE building agents / frontend)
 
-Person A pushed integration fixes + **three DB-backed MCP servers** (`vitals_trends`,
-`labs_diagnoses`, `medications_interactions`) + a Synthea version pin. A few of these change
-data/auth on your side, so sync first or you'll build against stale state. Companion docs: [`HANDOVER_PERSON_B.md`](HANDOVER_PERSON_B.md) (contract),
+> **Person A status (Jun 28, 2026):** Sprint **complete** — 4 MCP servers, Fixed Core, 62 tests,
+> pushed to https://github.com/aakash-p-s/MCP-Data-Factory (`main` + `person-a/phase-2`).
+> Person A keeps `docker compose up -d` + `bash scripts/start_mcp_servers.sh` running during
+> your integration. Jul 9 = integrated demo; Person A on support only.
+
+Person A pushed integration fixes + **four DB-backed MCP servers** (all live on :8001–8004).
+Sync first or you'll build against stale state. Companion docs: [`HANDOVER_PERSON_B.md`](HANDOVER_PERSON_B.md) (contract),
 [`CHANGELOG.md`](CHANGELOG.md) (what changed + commands), [`IMPLEMENTATION.md`](IMPLEMENTATION.md) (setup).
 
 Tick these top-to-bottom. Items marked **⚠ action** need you to actually do something.
 
+## 0. Clone / pull Person A delivery
+```bash
+git clone https://github.com/aakash-p-s/MCP-Data-Factory.git
+cd MCP-Data-Factory
+git checkout main    # or person-a/phase-2 — same Person A code after Jun 28 merge
+cp .env.example .env
+```
+
 ## 1. Pull the latest
 ```bash
-git checkout person-a/phase-2
+git checkout person-a/phase-2   # or main
 git pull
 ```
 
@@ -23,8 +35,18 @@ curl -sL -o infra/synthea/synthea-with-dependencies.jar \
 set -a; . ./.env; set +a
 uv run python infra/synthea/load_patients.py
 ```
-- **31 patients**, `demo-patient-1` is now **`080b069b-5108-46b6-ecef-6aacd3b9ef3f`**.
-- Use aliases from [`infra/synthea/demo_patient_aliases.json`](../infra/synthea/demo_patient_aliases.json), not hardcoded UUIDs.
+- **31 patients**, `demo-patient-1` is **`080b069b-5108-46b6-ecef-6aacd3b9ef3f`**.
+- MCP tools query by **UUID** — resolve aliases from [`infra/synthea/demo_patient_aliases.json`](../infra/synthea/demo_patient_aliases.json) in the agent layer.
+
+## 2b. ⚠ Clinical notes in Qdrant (if `get_recent_notes` returns empty)
+```bash
+LOAD_NOTES=true uv run python -c "
+from pathlib import Path
+from infra.synthea.load_patients import embed_and_load_notes
+embed_and_load_notes(Path('infra/synthea/output/fhir'))
+"
+```
+Or full loader: `LOAD_NOTES=true uv run python infra/synthea/load_patients.py` (truncates SQL).
 
 ## 3. ⚠ Seed interaction rules (if Postgres volume predates Jun 30)
 Six curated RxNorm drug-interaction pairs are auto-loaded on **first** Postgres init via
@@ -112,7 +134,13 @@ All four MCP servers are live. Register all 4 in `registry-db`.
 ---
 
 ## Then start YOUR build tasks (Person B PRD / tracker)
-- [ ] **Jun 29–30** — Runtime Agent skeleton: Host + MCP Clients against vitals + labs (Kong URL, not hardcoded localhost)
-- [ ] **Jul 1–3** — integrate all 4 servers; fusion + citations across four domains
-- [ ] **Jul 3** — CopilotKit chat + NextAuth login; OTel/Jaeger; CHECKPOINT
-- [ ] **Jul 8** — merge `docker-compose.platform.yml` + `docker-compose.data.yml`
+
+Person A is done — your work starts here:
+
+- [ ] **Keycloak** — `scp` + `groups[]` mappers; flip `AUTH_VERIFY_SIGNATURE=true`
+- [ ] **Kong** — verify all 4 routes → `host.docker.internal:8001–8004`
+- [ ] **Runtime agent** — LangGraph + 4 MCP clients via Kong URLs (`:8500`)
+- [ ] **Frontend** — Next.js + CopilotKit + NextAuth (`:3000`)
+- [ ] **Jul 3** — CopilotKit chat + OTel/Jaeger; CHECKPOINT
+- [x] **Jul 8** — unified `docker-compose.yml` (Person A merged)
+- [ ] **Jul 9** — integrated live demo (Person A keeps MCP servers up)
