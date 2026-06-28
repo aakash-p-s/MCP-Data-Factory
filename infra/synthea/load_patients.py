@@ -32,7 +32,7 @@ import psycopg
 
 # --- config (from .env / environment) ---------------------------------------
 SEED = int(os.getenv("SYNTHEA_SEED", "42"))
-PATIENT_COUNT = int(os.getenv("SYNTHEA_PATIENT_COUNT", "20"))
+PATIENT_COUNT = int(os.getenv("SYNTHEA_PATIENT_COUNT", "31"))
 VITALS_DB_URL = os.environ["VITALS_DB_URL"]
 CLINICAL_DB_URL = os.environ["CLINICAL_DB_URL"]
 # EMBEDDING_MODEL lives in backend/shared/embeddings.py (single source of truth) —

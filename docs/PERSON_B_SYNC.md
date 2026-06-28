@@ -23,7 +23,7 @@ curl -sL -o infra/synthea/synthea-with-dependencies.jar \
 set -a; . ./.env; set +a
 uv run python infra/synthea/load_patients.py
 ```
-- **31 patients**, `demo-patient-1` is now **`00050ed6-69b8-5c1f-02a3-dc3813143187`**.
+- **31 patients**, `demo-patient-1` is now **`080b069b-5108-46b6-ecef-6aacd3b9ef3f`**.
 - Use aliases from [`infra/synthea/demo_patient_aliases.json`](../infra/synthea/demo_patient_aliases.json), not hardcoded UUIDs.
 
 ## 3. ⚠ Re-init the platform stack (static Keycloak key)
