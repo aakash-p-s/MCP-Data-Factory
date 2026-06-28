@@ -43,6 +43,7 @@ services:
       - clinical_data:/var/lib/postgresql/data
       - ./infra/postgres/init-labs-diagnoses.sql:/docker-entrypoint-initdb.d/01-init-labs-diagnoses.sql:ro
       - ./infra/postgres/init-medications.sql:/docker-entrypoint-initdb.d/02-init-medications.sql:ro
+      - ./infra/postgres/seed-interaction-rules.sql:/docker-entrypoint-initdb.d/03-seed-interaction-rules.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${CLINICAL_USER:-postgres} -d ${CLINICAL_DB:-clinical}"]
       interval: 10s

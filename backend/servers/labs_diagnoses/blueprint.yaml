@@ -1,0 +1,24 @@
+# labs_diagnoses — MCP server blueprint (frozen contract, Codebase PRD §6.2).
+domain: labs_diagnoses
+storage: postgres            # clinical DB: labs + diagnoses tables
+fhir_resource: [Observation, Condition]
+terminology: [LOINC, SNOMED-CT, ICD-10]
+scope: mcp.labs.read
+kong_route: /mcp/clinical/labs-diagnoses/dev
+mcp_endpoint: /mcp
+status: DB-backed
+
+tools:
+  - name: get_lab_trend
+    signature: "(patient_id: str, test_name: str | None = None) -> list[Observation]"
+  - name: get_active_diagnoses
+    signature: "(patient_id: str) -> list[Condition]"
+  - name: get_diagnosis_history
+    signature: "(patient_id: str) -> list[Condition]"
+
+rbac:                         # Codebase PRD §6.3
+  clinical-viewer: allow
+  physician: allow
+  case-manager: deny
+
+denial_envelope: '{"error":{"code":"forbidden","reason":"missing scope mcp.labs.read"}}'

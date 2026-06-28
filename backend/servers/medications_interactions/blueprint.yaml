@@ -1,0 +1,25 @@
+# medications_interactions — MCP server blueprint (frozen contract, Codebase PRD §6.2).
+domain: medications_interactions
+storage: postgres            # clinical DB: medications + interaction_rules tables
+fhir_resource: MedicationStatement
+terminology: RxNorm
+scope: mcp.meds.read
+kong_route: /mcp/clinical/medications-interactions/dev
+mcp_endpoint: /mcp
+status: DB-backed
+
+tools:
+  - name: get_active_medications
+    signature: "(patient_id: str) -> list[MedicationStatement]"
+  - name: check_drug_interactions
+    signature: "(patient_id: str) -> list[dict]"   # curated RxNorm rule set, illustrative
+  - name: get_polypharmacy_risk
+    signature: "(patient_id: str) -> dict"          # 5+ distinct active meds = elevated
+
+rbac:                         # Codebase PRD §6.3 — physician-only
+  clinical-viewer: deny
+  physician: allow
+  case-manager: deny
+
+denial_envelope: '{"error":{"code":"forbidden","reason":"missing scope mcp.meds.read"}}'
+note: check_drug_interactions is ILLUSTRATIVE — not a licensed clinical drug-interaction database.

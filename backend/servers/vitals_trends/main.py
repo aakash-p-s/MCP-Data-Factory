@@ -12,8 +12,9 @@ Tools now query live TimescaleDB via SQLConnector (tools.py) and FHIR-shape the 
 the stub's hardcoded data is gone, but tool names + shapes are identical, so the swap is
 invisible to Person B's agent.
 
-Real JWT signature verification + full group/scope RBAC land Jul 2 (backend/shared/auth.py).
-For now: a bearer token missing the scope gets the 403 envelope; no token is allowed.
+Real JWT signature verification + the shared full group/scope RBAC engine land Jul 2
+(backend/shared/auth.py). Interim: a bearer token missing the scope OR whose `groups` are
+not in the blueprint's allow list (case-manager) gets the 403 envelope; no token is allowed.
 
 Run:  uv run python backend/servers/vitals_trends/main.py   # -> http://localhost:8001/mcp
 """
@@ -36,6 +37,11 @@ from backend.servers.vitals_trends import tools  # noqa: E402
 
 PORT = int(os.getenv("VITALS_PORT", "8001"))
 REQUIRED_SCOPE = "mcp.vitals.read"
+# Interim group-based RBAC (blueprint.yaml rbac: clinical-viewer + physician allow,
+# case-manager deny). Enforced only when a bearer token is present; the full two-layer
+# group/scope engine lands in backend/shared/auth.py (Jul 2) and supersedes this.
+ALLOWED_GROUPS = {g.strip() for g in os.getenv(
+    "VITALS_ALLOWED_GROUPS", "grp-clinical-viewer,grp-physician").split(",") if g.strip()}
 VITALS_DB_URL = os.environ.get(
     "VITALS_DB_URL", "postgresql://postgres:changeme@localhost:5433/vitals")
 
@@ -111,15 +117,20 @@ async def _json_response(send, status: int, payload: dict) -> None:
 class ScopeGuard:
     """Pure-ASGI guard so it never buffers MCP's streaming responses.
 
-    Stub behavior: a bearer token missing REQUIRED_SCOPE -> 403 envelope.
-    No token -> allowed (POC-friendly). Signature verification is added Jul 2.
+    When a bearer token is present, enforce two checks (explain-denial 403 on either):
+      1. scope  — `scp` must contain REQUIRED_SCOPE.
+      2. group  — `groups` must intersect ALLOWED_GROUPS (blueprint RBAC matrix);
+                  this denies case-manager even though the POC scp mapper is coarse.
+    No token -> allowed (POC-friendly). Real JWT signature verification + the shared
+    group/scope engine arrive Jul 2 (backend/shared/auth.py) and replace this interim guard.
     Browser / non-MCP probes to /, /health, or /mcp get a readable JSON summary.
     """
 
-    def __init__(self, app, required_scope: str, port: int):
+    def __init__(self, app, required_scope: str, port: int, allowed_groups: set[str]):
         self.app = app
         self.required = required_scope
         self.port = port
+        self.allowed_groups = allowed_groups
 
     async def __call__(self, scope, receive, send):
         if scope["type"] == "http":
@@ -150,10 +161,25 @@ class ScopeGuard:
                         },
                     })
                     return
+                # group RBAC: normalise Keycloak group paths ("/grp-x" -> "grp-x").
+                # Only enforced when the token actually carries groups — a user token
+                # (nurse/physician/case-manager) gets the blueprint matrix applied, while
+                # the trusted runtime-agent service-account token (no groups, like the
+                # already-allowed no-token path) still passes. auth.py (Jul 2) refines this.
+                token_groups = {g.lstrip("/") for g in (claims.get("groups") or [])}
+                if self.allowed_groups and token_groups and not (token_groups & self.allowed_groups):
+                    await _json_response(send, 403, {
+                        "error": {
+                            "code": "forbidden",
+                            "reason": "role not permitted for vitals_trends; "
+                                      f"requires group in {sorted(self.allowed_groups)}",
+                        },
+                    })
+                    return
         await self.app(scope, receive, send)
 
 
-app = ScopeGuard(mcp.streamable_http_app(), REQUIRED_SCOPE, PORT)
+app = ScopeGuard(mcp.streamable_http_app(), REQUIRED_SCOPE, PORT, ALLOWED_GROUPS)
 
 
 if __name__ == "__main__":
