@@ -184,6 +184,34 @@ Banner confirms: `MCP SDK 1.28.0 | endpoint http://localhost:8001/mcp | scope=mc
 
 ---
 
+## Updating an existing clone (your other machine)
+
+Already set up once? Don't redo the above — just pull the latest. All config (embedding
+model pin, schemas, stub, platform files) travels with the repo.
+
+```bash
+git pull                                  # on the person-a/phase-2 branch
+```
+```powershell
+git pull                                  # Windows is identical
+```
+
+Only re-run a step if its *inputs* changed:
+- **Dependencies changed** (`requirements.txt`) → `uv pip install -r requirements.txt`
+- **Schema `.sql` changed** → `docker compose -f docker-compose.data.yml down -v && up -d`
+- **Loader changed / want fresh data** → re-run the loader (Section 5)
+
+Optional — make clinical notes searchable in Qdrant on this machine too (model auto-downloads):
+
+```bash
+LOAD_NOTES=true uv run python infra/synthea/load_patients.py            # macOS / Linux
+```
+```powershell
+$env:LOAD_NOTES="true"; uv run python infra/synthea/load_patients.py    # Windows
+```
+
+---
+
 ## Gotchas checklist
 
 | Item | Why it bites |
