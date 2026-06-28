@@ -1,5 +1,5 @@
-# Person A's half of the infrastructure — the 3 data stores (+ optional pgAdmin).
-# Person B owns docker-compose.platform.yml; merge into one file on Jul 8.
+# Person A's half — the 3 data stores (+ optional pgAdmin).
+# Prefer the unified stack:  docker compose up -d   (see docker-compose.yml)
 #
 #   docker compose -f docker-compose.data.yml up -d
 #
@@ -38,7 +38,7 @@ services:
       POSTGRES_USER: ${CLINICAL_USER:-postgres}
       POSTGRES_PASSWORD: ${CLINICAL_PASSWORD:-changeme}
     ports:
-      - "${CLINICAL_PORT:-5436}:5432"
+      - "${CLINICAL_PORT:-5434}:5432"
     volumes:
       - clinical_data:/var/lib/postgresql/data
       - ./infra/postgres/init-labs-diagnoses.sql:/docker-entrypoint-initdb.d/01-init-labs-diagnoses.sql:ro

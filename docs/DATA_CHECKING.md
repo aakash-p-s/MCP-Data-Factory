@@ -99,6 +99,7 @@ SELECT count(*) AS vitals FROM vitals;
 SELECT count(*) AS labs FROM labs;
 SELECT count(*) AS diagnoses FROM diagnoses;
 SELECT count(*) AS medications FROM medications;
+SELECT count(*) AS interaction_rules FROM interaction_rules;   -- expect 6 after seed
 ```
 
 Expected ballpark for `SYNTHEA_SEED=42` / 31 patients on the pinned v4.0.0 jar
@@ -201,7 +202,7 @@ docker exec postgres-clinical psql -U postgres -d clinical -c "SELECT count(*) F
 | `clinical` | `labs` | Laboratory results (LOINC-coded) |
 | `clinical` | `diagnoses` | Conditions (SNOMED / ICD) |
 | `clinical` | `medications` | Prescribed medications (RxNorm) |
-| `clinical` | `interaction_rules` | Drug interaction reference rules |
+| `clinical` | `interaction_rules` | Curated RxNorm drug-interaction demo rules (seeded on first Postgres init) |
 | Qdrant | `clinical_notes` | Physician note text + embedding vectors |
 
 ---

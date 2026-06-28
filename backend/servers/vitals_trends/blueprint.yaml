@@ -8,7 +8,7 @@ terminology: LOINC
 scope: mcp.vitals.read
 kong_route: /mcp/clinical/vitals-trends/dev
 mcp_endpoint: /mcp              # direct Streamable HTTP endpoint behind the route
-status: STUB                    # hardcoded data; DB-backed server replaces this Jun 29
+status: DB-backed
 
 tools:
   - name: get_vitals_trend

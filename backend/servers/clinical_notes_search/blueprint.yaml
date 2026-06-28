@@ -1,0 +1,24 @@
+# clinical_notes_search — MCP server blueprint (frozen contract, Codebase PRD §6.2).
+domain: clinical_notes_search
+storage: qdrant               # clinical_notes collection
+fhir_resource: DocumentReference
+scope: mcp.notes.read
+kong_route: /mcp/clinical/clinical-notes-search/dev
+mcp_endpoint: /mcp
+status: DB-backed
+
+tools:
+  - name: semantic_search_notes
+    signature: "(patient_id: str, query: str, limit: int = 5) -> list[DocumentReference]"
+  - name: get_recent_notes
+    signature: "(patient_id: str, limit: int = 5) -> list[DocumentReference]"
+    cached: 30s
+  - name: get_notes_by_type
+    signature: "(patient_id: str, note_type: str, limit: int = 10) -> list[DocumentReference]"
+
+rbac:                         # Codebase PRD §6.3 — notes for care coordination
+  clinical-viewer: deny
+  physician: allow
+  case-manager: allow
+
+denial_envelope: '{"error":{"code":"forbidden","reason":"missing scope mcp.notes.read"}}'
