@@ -17,7 +17,7 @@ services:
     ports:
       - "8080:8080"
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080/realms/patient-risk"]
+      test: ["CMD-SHELL", "exec 3<>/dev/tcp/localhost/8080 && echo -e 'GET /realms/patient-risk HTTP/1.0\r\n\r\n' >&3 && cat <&3 | grep -q patient-risk"]
       interval: 15s
       timeout: 5s
       retries: 10
