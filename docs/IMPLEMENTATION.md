@@ -164,7 +164,7 @@ curl -s http://localhost:6333/collections/clinical_notes | jq .result.points_cou
 ```
 ```powershell
 curl.exe -s http://localhost:6333/collections/clinical_notes
-# -> "points_count": 900+  (966 notes + 1 fingerprint for seed=42 / 20 patients)
+# -> "points_count": hundreds  (one chunk per encounter note + 1 fingerprint for seed=42 / 31 patients)
 ```
 
 Browse payloads in the Qdrant dashboard: http://localhost:6333/dashboard

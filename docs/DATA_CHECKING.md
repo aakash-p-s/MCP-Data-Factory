@@ -101,8 +101,9 @@ SELECT count(*) AS diagnoses FROM diagnoses;
 SELECT count(*) AS medications FROM medications;
 ```
 
-Expected ballpark for `SYNTHEA_SEED=42` / 20 patients (counts may vary slightly
-by Synthea version): vitals ~230+, labs ~2300+, diagnoses ~580+, medications ~360+.
+Expected ballpark for `SYNTHEA_SEED=42` / 31 patients on the pinned v4.0.0 jar
+(counts may vary slightly by Synthea version): vitals ~467, labs ~8442,
+diagnoses ~1066, medications ~1158.
 
 ### Sample rows
 

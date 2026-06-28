@@ -19,8 +19,8 @@ for everyone are called out so Person B / other machines can stay in sync. See
   curl -sL -o infra/synthea/synthea-with-dependencies.jar \
     https://github.com/synthetichealth/synthea/releases/download/v4.0.0/synthea-with-dependencies.jar
   ```
-- **Data now:** 31 patients; `demo-patient-1 = 00050ed6-69b8-5c1f-02a3-dc3813143187`.
-  Reseed reproducibility verified (identical patient + counts).
+- **Data now:** 31 patients (`SYNTHEA_PATIENT_COUNT=31`, seed 42); `demo-patient-1 = 080b069b-5108-46b6-ecef-6aacd3b9ef3f`.
+  Reseed reproducibility verified (identical patient + counts) with the pinned v4.0.0 jar.
 
 ### `vitals_trends` is now DB-backed (was a stub)
 - `backend/connectors/sql_connector.py` — Connector ABC over asyncpg, read-only SELECT guard.
