@@ -1,0 +1,55 @@
+flowchart TB
+    classDef gate fill:#fde68a,stroke:#b45309,color:#1f2937;
+    classDef clinic fill:#bfdbfe,stroke:#1d4ed8,color:#1f2937;
+    classDef kit fill:#e9d5ff,stroke:#7e22ce,color:#1f2937;
+    classDef store fill:#bbf7d0,stroke:#15803d,color:#1f2937;
+    classDef out fill:#fbcfe8,stroke:#be185d,color:#1f2937;
+    classDef actor fill:#f1f5f9,stroke:#475569,color:#1f2937;
+
+    V([Clinician / LangGraph Agent]):::actor
+    KC[(Keycloak :8080<br/>realm patient-risk<br/>signs JWT: scp + groups)]:::actor
+    V -->|login| KC
+    KC -->|Bearer JWT| V
+
+    V -->|POST /mcp + Bearer JWT| GATE
+
+    subgraph GATE_LAYER["FRONT GATE — Kong :8000 (Layer 1)"]
+        GATE[Valid signature? Under quota?<br/>Route to the right clinic]:::gate
+    end
+    GATE -->|401 invalid / 429 over-quota| V
+
+    GATE --> C1
+    GATE --> C2
+    GATE --> C3
+    GATE --> C4
+
+    subgraph WING["THE WING — 4 MCP servers, one hardened blueprint"]
+        direction LR
+        C1["vitals_trends :8001<br/>nurse + physician<br/>get_vitals_trend / NEWS2 / abnormal"]:::clinic
+        C2["labs_diagnoses :8002<br/>nurse + physician<br/>lab_trend / diagnoses"]:::clinic
+        C3["medications :8003<br/>physician ONLY<br/>meds / interactions / polypharmacy"]:::clinic
+        C4["clinical_notes :8004<br/>physician + case-manager<br/>semantic / recent / by_type"]:::clinic
+    end
+
+    subgraph KIT["DOOR KIT — Fixed Core, bolted into every server (Layer 2)"]
+        direction LR
+        K1[auth + middleware<br/>re-verify JWT + scope]:::kit
+        K2[audit + purpose_of_access]:::kit
+        K3[egress_guard<br/>locked DSN]:::kit
+        K4[cache 30s TTL]:::kit
+        K5[self_healing<br/>tenacity retry]:::kit
+    end
+
+    C1 & C2 & C3 & C4 -->|allowed?| AZ{scope + group<br/>RBAC check}:::kit
+    AZ -->|deny| D403[403 forbidden<br/>missing scope / role]:::out
+    AZ -->|allow| CONN[Pluggable connector layer]:::kit
+
+    CONN -->|SQLConnector| CAB[(TimescaleDB :5433 vitals<br/>Postgres :5434 labs/dx/meds)]:::store
+    CONN -->|VectorConnector| LIB[(Qdrant :6333<br/>clinical notes embeddings)]:::store
+
+    CAB & LIB -->|rows| FHIR[FHIR R4 resources<br/>Observation / Condition /<br/>MedicationStatement / DocumentReference]:::out
+    FHIR --> FUSE[Agent fuses + cites:<br/>NEWS2 6 vitals · 3 interactions meds ·<br/>fall-risk note notes]:::out
+    D403 --> FUSE
+    FUSE --> V
+
+    WING -.every call passes through.-> KIT
