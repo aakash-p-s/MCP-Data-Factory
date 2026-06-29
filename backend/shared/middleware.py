@@ -13,6 +13,7 @@ from collections.abc import Callable
 
 import jwt
 
+from backend.shared import telemetry, tool_trust, usage_log
 from backend.shared.audit import log_call, normalize_purpose
 from backend.shared.auth import evaluate, verify_token
 from backend.shared.request_context import clear_context, set_context
@@ -54,6 +55,7 @@ class FixedCoreGuard:
         self.port = port
         self.kong_route = kong_route
         self.tools = tools
+        telemetry.configure(service)
 
     def service_info(self) -> dict:
         return {
@@ -65,6 +67,7 @@ class FixedCoreGuard:
             "scope": self.required_scope,
             "kong_route": self.kong_route,
             "tools": self.tools,
+            "usage_endpoint": f"http://localhost:{self.port}/usage",
             "client_headers": {
                 "Accept": "application/json, text/event-stream",
                 "Content-Type": "application/json",
@@ -87,22 +90,41 @@ class FixedCoreGuard:
             await _json_response(send, 200, self.service_info())
             return
 
+        if path == "/usage":
+            await _json_response(send, 200, {
+                "service": self.service, "usage": usage_log.snapshot(self.service)})
+            return
+
         if path == "/mcp" and "text/event-stream" not in accept:
             await _json_response(send, 200, self.service_info())
             return
 
         purpose = normalize_purpose(headers.get("x-purpose-of-access"))
-        trace_id = headers.get("x-trace-id") or headers.get("traceparent")
+        trace_id = telemetry.extract_trace_id(headers)
+
+        # Tool-trust: a hardened server only answers through its registered Kong route
+        # (no-op unless TOOL_TRUST_ENFORCE=true).
+        trusted, trust_reason = tool_trust.verify_kong_origin(headers)
+        if not trusted:
+            usage_log.record("unknown", self.service, "denied")
+            log_call("unknown", f"{self.service}:auth", "denied", trust_reason, purpose, trace_id)
+            await _json_response(send, 403, {
+                "error": {"code": "forbidden", "reason": trust_reason},
+            })
+            return
+
         auth = headers.get("authorization", "")
 
         if not auth.lower().startswith("bearer "):
             if ALLOW_ANONYMOUS:
                 set_context(None, purpose, trace_id)
                 try:
-                    await self.app(scope, receive, send)
+                    with telemetry.span(f"{self.service}.request", trace_id, role="anonymous"):
+                        await self.app(scope, receive, send)
                 finally:
                     clear_context()
                 return
+            usage_log.record("anonymous", self.service, "denied")
             log_call("anonymous", f"{self.service}:auth", "denied",
                      "missing bearer token", purpose, trace_id)
             await _json_response(send, 401, {
@@ -117,6 +139,7 @@ class FixedCoreGuard:
         try:
             claims = verify_token(token)
         except jwt.PyJWTError as exc:
+            usage_log.record("unknown", self.service, "denied")
             log_call("unknown", f"{self.service}:auth", "denied", str(exc), purpose, trace_id)
             await _json_response(send, 401, {
                 "error": {"code": "unauthorized", "reason": str(exc)},
@@ -124,18 +147,22 @@ class FixedCoreGuard:
             return
 
         who = str(claims.get("sub") or "unknown")
+        role = usage_log.role_of(claims)
         ok, reason = evaluate(claims, self.required_scope, self.allowed_groups, self.service)
         if not ok:
+            usage_log.record(role, self.service, "denied")
             log_call(who, f"{self.service}:auth", "denied", reason, purpose, trace_id)
             await _json_response(send, 403, {
                 "error": {"code": "forbidden", "reason": reason},
             })
             return
 
+        usage_log.record(role, self.service, "allowed")
         log_call(who, f"{self.service}:auth", "allowed", None, purpose, trace_id)
         set_context(claims, purpose, trace_id)
         try:
-            await self.app(scope, receive, send)
+            with telemetry.span(f"{self.service}.request", trace_id, role=role, who=who):
+                await self.app(scope, receive, send)
         finally:
             clear_context()
 

@@ -104,13 +104,26 @@ class VectorConnector(Connector):
             if not query_text:
                 return []
             vector = await asyncio.to_thread(embed, query_text)
-            hits = await self._client.search(
-                collection_name=COLLECTION,
-                query_vector=vector,
-                query_filter=_patient_filter(patient_id),
-                limit=limit,
-                with_payload=True,
-            )
+            flt = _patient_filter(patient_id)
+            # qdrant-client >=1.10 replaced .search() with .query_points(); fall back to
+            # .search() on older clients so this works across pinned versions.
+            if hasattr(self._client, "query_points"):
+                resp = await self._client.query_points(
+                    collection_name=COLLECTION,
+                    query=vector,
+                    query_filter=flt,
+                    limit=limit,
+                    with_payload=True,
+                )
+                hits = resp.points
+            else:
+                hits = await self._client.search(
+                    collection_name=COLLECTION,
+                    query_vector=vector,
+                    query_filter=flt,
+                    limit=limit,
+                    with_payload=True,
+                )
             return [_row(h) for h in hits]
 
         flt = _patient_filter(

@@ -29,15 +29,16 @@ Aligned with **PersonA PRD** + **Codebase PRD §5–7** and [`Person_A_Tasks.xls
 | **Data** | Synthea loader (pinned **v4.0.0**, seed 42, **31 patients**); `demo_patient_aliases.json`; optional notes → Qdrant (`LOAD_NOTES=true`) |
 | **Connectors** | `SQLConnector`, `VectorConnector` — same `Connector` ABC |
 | **4 MCP servers** | `vitals_trends` :8001 · `labs_diagnoses` :8002 · `medications_interactions` :8003 · `clinical_notes_search` :8004 (**12 tools**) |
-| **Fixed Core** | `auth.py`, `audit.py` (+ `purpose_of_access` enum), `egress_guard.py`, `cache.py`, `FixedCoreGuard`, `self_healing.py` |
+| **Fixed Core** | `auth.py`, `audit.py` (+ `purpose_of_access` enum), `egress_guard.py`, `cache.py`, `FixedCoreGuard`, `self_healing.py`, `telemetry.py` (W3C trace_id → audit), `tool_trust.py` (Kong-origin), `usage_log.py` (+ `/usage`) |
 | **Embeddings** | Single source in `backend/shared/embeddings.py` + Qdrant fingerprint guard |
-| **Tests** | `test_rbac_matrix.py` (auth engine), `test_rbac_matrix_http.py` (4×3 HTTP matrix), `test_mcp_inspector.py`, `test_fixed_core.py`, `test_self_healing.py`, `test_clinical_notes_search.py` — **62 pytest passing**; `scripts/mcp_inspector_smoke.py --in-process` (4/4 servers) |
+| **Tests** | `test_rbac_matrix.py` (auth engine), `test_rbac_matrix_http.py` (4×3 HTTP matrix), `test_mcp_inspector.py`, `test_fixed_core.py`, `test_self_healing.py`, `test_clinical_notes_search.py`, `test_telemetry.py`, `test_tool_trust.py`, `test_usage_log.py` — **77 pytest passing**; `scripts/mcp_inspector_smoke.py --in-process` (4/4 servers) |
 
 ### Partial / open
 
 | PRD area | Gap |
 | --- | --- |
-| **Fixed Core (optional PRD)** | `telemetry.py`, `tool_trust.py`, `usage_log.py`, `fhir_shape.py` not shipped |
+| **`fhir_shape.py`** | FHIR R4 shaping done inline in each `tools.py` (no shared module — functionally complete) |
+| **Docker auto-restart** | `restart: unless-stopped` set, but a hard `docker kill` did not auto-restart the DB locally; in-process connector self-healing still recovered the call |
 | **Jul 9 demo** | Final fixes + live demo support |
 
 ### Person B (not Person A — builds next)
