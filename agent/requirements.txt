@@ -1,0 +1,30 @@
+# agent/requirements.txt
+# Patient Risk Intelligence — Runtime Agent dependencies
+# Python 3.12 (PRD §8)
+#
+# CRITICAL: mcp version MUST match Person A's requirements.lock (mcp==1.28.0)
+# A version mismatch causes protocol-negotiation failures between agent clients
+# and MCP servers. Do not upgrade mcp without updating ALL 4 servers + agent together.
+
+# Web framework + ASGI server
+fastapi==0.136.0
+uvicorn[standard]==0.34.3
+
+# LangGraph agent orchestration
+langgraph==0.2.57
+langchain-core==0.3.36
+langchain-openai==0.2.14
+langchain-mcp-adapters==0.1.0
+
+# MCP SDK — MUST match Person A's pin exactly
+mcp==1.28.0
+
+# HTTP client (used by langchain internals + health checks)
+httpx==0.28.1
+
+# OpenTelemetry tracing
+opentelemetry-sdk==1.30.0
+opentelemetry-exporter-otlp==1.30.0
+
+# Data validation
+pydantic>=2
