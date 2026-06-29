@@ -56,6 +56,30 @@ def test_semantic_search_empty_query_returns_empty():
     assert asyncio.run(run()) == []
 
 
+def test_semantic_search_uses_query_points(monkeypatch):
+    """Search must use the current qdrant-client query_points() API (not removed .search())."""
+    from types import SimpleNamespace
+    from unittest.mock import AsyncMock
+
+    conn = VectorConnector("http://localhost:6333")
+    client = AsyncMock()
+    point = SimpleNamespace(
+        id=7, score=0.91,
+        payload={"patient_id": "p1", "note_type": "physician_note", "text": "chest pain noted"})
+    client.query_points = AsyncMock(return_value=SimpleNamespace(points=[point]))
+    conn._client = client
+    conn._verified = True
+    monkeypatch.setattr("backend.connectors.vector_connector.embed", lambda _t: [0.0] * 384)
+
+    async def run():
+        return await conn.query(
+            {"mode": "search", "patient_id": "p1", "query_text": "chest pain", "limit": 3})
+
+    rows = asyncio.run(run())
+    assert client.query_points.await_count == 1
+    assert len(rows) == 1 and rows[0]["id"] == 7 and rows[0]["score"] == 0.91
+
+
 def test_egress_guard_registers_notes_server():
     conn = locked_connector_for("clinical_notes_search")
     assert type(conn).__name__ == "VectorConnector"

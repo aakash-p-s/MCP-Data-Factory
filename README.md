@@ -368,7 +368,7 @@ uv run python backend/servers/medications_interactions/main.py   # -> :8003/mcp 
 uv run python backend/servers/clinical_notes_search/main.py      # -> :8004/mcp  mcp.notes.read
 
 # --- Phase 4: tests + verify (before push to Person B) -------------------------
-uv run pytest backend/tests/ -q                                  # 62 tests (in-process)
+uv run pytest backend/tests/ -q                                  # 77 tests (in-process)
 bash scripts/start_mcp_servers.sh --verify                       # live health + RBAC + tool calls
 uv run python scripts/mcp_inspector_smoke.py                     # live tools/list on :8001–8004
 # Notes server needs Qdrant populated: LOAD_NOTES=true uv run python infra/synthea/load_patients.py
@@ -479,7 +479,7 @@ container hostnames inside pgAdmin, not `localhost`).
 
 ```bash
 uv run pytest backend/tests/ -q
-# expect: 62 passed
+# expect: 77 passed
 ```
 
 ### Step 5 — Start all 4 MCP servers
@@ -611,10 +611,10 @@ MCP-Data-Factory/
 │   │   ├── egress_guard.py              [x]  SSRF / egress lock (locked_connector_for)
 │   │   ├── cache.py                     [x]  30s TTL cache (@cached)
 │   │   ├── self_healing.py              [x]  tenacity retry + pool/client reset
-│   │   ├── fhir_shape.py                [ ]  rows -> FHIR R4 (optional PRD)
-│   │   ├── telemetry.py                 [ ]  OpenTelemetry trace propagation
-│   │   ├── tool_trust.py                [ ]  Kong-origin / tool-poisoning guard
-│   │   └── usage_log.py                 [ ]  per-role usage/denial counters
+│   │   ├── telemetry.py                 [x]  OpenTelemetry + W3C trace_id propagation
+│   │   ├── tool_trust.py                [x]  Kong-origin / tool-poisoning guard
+│   │   ├── usage_log.py                 [x]  per-role query/denial counters (+ /usage)
+│   │   └── fhir_shape.py                [~]  FHIR R4 shaping done inline in each tools.py
 │   ├── connectors/
 │   │   ├── sql_connector.py             [x]  TimescaleDB/Postgres (asyncpg, read-only guard)
 │   │   └── vector_connector.py          [x]  Qdrant (clinical_notes_search)
@@ -653,9 +653,10 @@ MCP-Data-Factory/
 | Fixed Core (auth, audit, egress, cache, middleware) | Done |
 | Self-healing (tenacity on connectors) | Done |
 | Unified `docker-compose.yml` | Done |
-| RBAC matrix tests (4×3 HTTP + auth engine) | Done — **62 pytest passing** |
+| RBAC matrix tests (4×3 HTTP + auth engine) | Done — **77 pytest passing** |
 | MCP Inspector smoke | Done — `scripts/mcp_inspector_smoke.py` |
-| Jul 9 demo / optional PRD modules | Open — `telemetry.py`, `tool_trust.py`, `usage_log.py`, `fhir_shape.py` |
+| Hardening modules: telemetry · tool_trust · usage_log | Done — trace_id propagates to audit; `/usage` per-role counters |
+| Jul 9 demo / optional PRD modules | `fhir_shape.py` done inline in each `tools.py` (no shared module) |
 
 ---
 
@@ -666,15 +667,19 @@ MCP-Data-Factory/
 [`person-a/phase-2`](https://github.com/aakash-p-s/MCP-Data-Factory/tree/person-a/phase-2)
 and merged into [`main`](https://github.com/aakash-p-s/MCP-Data-Factory).
 
-**Verified acceptance:** 62 pytest · MCP Inspector 4/4 · pre-push verify 14/14 · live FHIR
+**Verified acceptance:** 77 pytest · MCP Inspector 4/4 · pre-push verify 14/14 · live FHIR
 tool calls on all four servers.
 
 ### Still open (Person A — Jul 9 only)
 
 - **Live demo support** — keep servers running when Person B integrates; fix integration bugs
   if contracts break (no new features unless agreed).
-- **Optional PRD modules** — `telemetry.py`, `tool_trust.py`, `usage_log.py`, `fhir_shape.py`
-  (deferred; not blocking handoff).
+- **`fhir_shape.py`** — FHIR R4 shaping currently lives inline in each server's `tools.py`
+  (functionally complete); extracting it into a shared module is optional polish.
+- **Docker auto-restart** — `restart: unless-stopped` is set on every data container, but a
+  hard `docker kill` did not auto-restart the DB in local testing (in-process connector
+  self-healing still recovered the call without restarting the MCP server). Verify the
+  container restart policy in the target environment.
 
 ### Person B builds next (not Person A)
 
