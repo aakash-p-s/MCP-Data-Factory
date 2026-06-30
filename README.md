@@ -8,8 +8,7 @@ Built entirely from free, self-hosted, open-source components and fed by fully s
 FHIR R4 patient data ([Synthea](https://github.com/synthetichealth/synthea)) — zero real PHI.
 
 > See [`PRD Docs/`](PRD%20Docs/) for the full Product Requirements Documents (PDFs + Person A
-> status summary). Sprint tracker: [`Person_A_Tasks.xlsx`](Person_A_Tasks.xlsx). This README
-> summarizes the problem, the solution, and the end-to-end workflow.
+> status summary). This README summarizes the problem, the solution, and the end-to-end workflow.
 
 **Docs index** (all in [`docs/`](docs/)): [`IMPLEMENTATION.md`](docs/IMPLEMENTATION.md) (setup, any OS) ·
 [`MCP_SERVERS.md`](docs/MCP_SERVERS.md) (how each server is built) ·
@@ -17,7 +16,6 @@ FHIR R4 patient data ([Synthea](https://github.com/synthetichealth/synthea)) —
 [`DATA_CHECKING.md`](docs/DATA_CHECKING.md) (browse SQL + Qdrant in the browser) ·
 [`backend/README.md`](backend/README.md) (backend detail) ·
 [`CHANGELOG.md`](docs/CHANGELOG.md) (what changed + commands) ·
-[`Person_A_Tasks.xlsx`](Person_A_Tasks.xlsx) (Person A sprint tracker) ·
 [`PERSON_B_SYNC.md`](docs/PERSON_B_SYNC.md) (Person B: do-before-building checklist) ·
 [`HANDOVER_PERSON_B.md`](docs/HANDOVER_PERSON_B.md) (integration contract).
 
@@ -574,7 +572,6 @@ MCP-Data-Factory/
 ├── pytest.ini                       [x]  asyncio_mode = auto; testpaths = backend/tests
 ├── requirements.txt / .lock         [x]  pinned deps (Python 3.12)
 ├── .env.example                     [x]
-├── Person_A_Tasks.xlsx              [x]  sprint tracker (Jul 2–8 Done)
 │
 ├── scripts/
 │   ├── start_mcp_servers.sh         [x]  start all 4 servers; --verify runs pre_push_verify
@@ -662,8 +659,7 @@ MCP-Data-Factory/
 
 ## Person A complete — what happens next
 
-**Status (Jun 28, 2026):** Person A sprint is **done** (10/11 tasks in
-[`Person_A_Tasks.xlsx`](Person_A_Tasks.xlsx)). Code is on GitHub:
+**Status (Jun 28, 2026):** Person A sprint is **done** (10/11 tasks). Code is on GitHub:
 [`person-a/phase-2`](https://github.com/aakash-p-s/MCP-Data-Factory/tree/person-a/phase-2)
 and merged into [`main`](https://github.com/aakash-p-s/MCP-Data-Factory).
 

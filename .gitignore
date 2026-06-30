@@ -50,3 +50,6 @@ Thumbs.db
 .vscode/
 *.swp
 *.swo
+
+# Logs
+*.log
