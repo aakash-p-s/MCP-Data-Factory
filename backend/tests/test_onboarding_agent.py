@@ -79,3 +79,20 @@ def test_fallback_tools_shape(domain):
     for tool in tools:
         assert "name" in tool and "signature" in tool
         assert tool["signature"].startswith("(patient_id: str")
+
+
+@pytest.mark.parametrize("domain", list(EXPECTED_RBAC.keys()))
+def test_golden_tools_match_committed_blueprint(domain):
+    """First-pass suggest_tools for frozen domains must reuse committed tools."""
+    from pathlib import Path
+
+    import yaml
+
+    from backend.onboarding_agent.suggest_tools import suggest_tools_and_metadata
+
+    tools, _metadata = suggest_tools_and_metadata(domain, schema={"raw": {}})
+    bp = yaml.safe_load(
+        (Path("backend/servers") / domain / "blueprint.yaml").read_text()
+    )
+    assert [t["name"] for t in tools] == [t["name"] for t in bp["tools"]]
+

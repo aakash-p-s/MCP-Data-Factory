@@ -45,6 +45,7 @@ VITALS_URL = os.environ.get("VITALS_MCP_URL", "http://localhost:8001/mcp")
 LABS_URL = os.environ.get("LABS_MCP_URL", "http://localhost:8002/mcp")
 MEDS_URL = os.environ.get("MEDS_MCP_URL", "http://localhost:8003/mcp")
 NOTES_URL = os.environ.get("NOTES_MCP_URL", "http://localhost:8004/mcp")
+RADIOLOGY_URL = os.environ.get("RADIOLOGY_MCP_URL", "http://localhost:8005/mcp")
 
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "")
 
@@ -69,6 +70,7 @@ _STATIC_URLS = {
     "labs_diagnoses": LABS_URL,
     "medications_interactions": MEDS_URL,
     "clinical_notes_search": NOTES_URL,
+    "radiology_reports": RADIOLOGY_URL,
 }
 # Frozen RBAC matrix (§6.3) used as the fallback when registry discovery is off.
 # Group form (grp-<role>) to match the caller's Keycloak `groups` and the registry's
@@ -78,6 +80,7 @@ _STATIC_RBAC = {
     "labs_diagnoses": {"grp-clinical-viewer", "grp-physician"},
     "medications_interactions": {"grp-physician"},
     "clinical_notes_search": {"grp-physician", "grp-case-manager"},
+    "radiology_reports": {"grp-physician"},
 }
 
 
@@ -159,6 +162,19 @@ VALID_PURPOSES = {
     "routine_review",
 }
 
+# Common typos / shorthand → canonical enum (QUICK_TEST pitfall #1)
+PURPOSE_ALIASES = {
+    "medication_review": "medication_reconciliation",
+    "meds_review": "medication_reconciliation",
+    "med_review": "medication_reconciliation",
+}
+
+
+def normalize_purpose(purpose: str) -> str:
+    """Map common purpose typos to the canonical PRD enum."""
+    p = purpose.strip()
+    return PURPOSE_ALIASES.get(p, p)
+
 # ---------------------------------------------------------------------------
 # Request / Response models
 # ---------------------------------------------------------------------------
@@ -223,6 +239,19 @@ def _build_server_config(token: str, groups: list[str] | None = None) -> dict:
     return servers
 
 
+def _rbac_excluded_domains(groups: list[str]) -> list[str]:
+    """Domains the caller's groups cannot reach (for clearer /ask errors)."""
+    caller_groups = set(groups)
+    excluded: list[str] = []
+    for domain, info in discover_servers().items():
+        if not info.get("url"):
+            continue
+        allowed = info.get("allowed_roles") or set()
+        if caller_groups and not (caller_groups & allowed):
+            excluded.append(domain)
+    return sorted(excluded)
+
+
 async def _run_agent(
     question: str,
     patient_uuid: str,
@@ -254,6 +283,17 @@ async def _run_agent(
         groups = []
 
     server_config = _build_server_config(token, groups)
+
+    if not server_config and groups:
+        excluded = _rbac_excluded_domains(groups)
+        roles = ", ".join(sorted(groups))
+        domains = ", ".join(excluded) or "all registered domains"
+        return (
+            f"No MCP servers are accessible for your role ({roles}). "
+            f"Access denied for: {domains}. "
+            "Use a physician token (doctor-test / test123) for medications, notes, and radiology.",
+            [],
+        )
 
     full_question = (
         f"{question}\n\n"
@@ -347,8 +387,9 @@ async def ask_question(
         )
     token = authorization.removeprefix("Bearer ").strip()
 
-    # --- purpose_of_access enum validation ---
-    if request.purpose_of_access not in VALID_PURPOSES:
+    # --- purpose_of_access enum validation (accept common aliases) ---
+    purpose = normalize_purpose(request.purpose_of_access)
+    if purpose not in VALID_PURPOSES:
         raise HTTPException(
             status_code=422,
             detail=(
@@ -364,14 +405,14 @@ async def ask_question(
         answer, servers_called = await _run_agent(
             question=request.question,
             patient_uuid=patient_uuid,
-            purpose=request.purpose_of_access,
+            purpose=purpose,
             token=token,
         )
         return AskResponse(
             answer=answer,
             patient_id=request.patient_id,
             patient_uuid=patient_uuid,
-            purpose_of_access=request.purpose_of_access,
+            purpose_of_access=purpose,
             servers_called=servers_called,
         )
     except ValueError as exc:
@@ -397,6 +438,7 @@ async def health():
             "labs_diagnoses": LABS_URL,
             "medications_interactions": MEDS_URL,
             "clinical_notes_search": NOTES_URL,
+            "radiology_reports": RADIOLOGY_URL,
         },
         "demo_aliases_loaded": len(_ALIASES),
     }
