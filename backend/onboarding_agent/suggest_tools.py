@@ -24,10 +24,23 @@ from __future__ import annotations
 import json
 import logging
 import os
+from pathlib import Path
+
+import yaml
 
 logger = logging.getLogger(__name__)
 
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "")
+
+# Frozen domains — reuse committed blueprint tools (deterministic golden-file proof)
+GOLDEN_DOMAINS = frozenset({
+    "vitals_trends",
+    "labs_diagnoses",
+    "medications_interactions",
+    "clinical_notes_search",
+})
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
 
 # Closed vocabularies the LLM must pick from - keeps inferred metadata
 # consistent with what the rest of the platform (Kong routes, connectors,
@@ -107,6 +120,16 @@ Previous tools that were rejected (do not just repeat these):
 """
 
 
+def _load_golden_blueprint(domain: str) -> dict | None:
+    """Return committed blueprint for a frozen domain (tools + metadata)."""
+    if domain not in GOLDEN_DOMAINS:
+        return None
+    path = REPO_ROOT / "backend" / "servers" / domain / "blueprint.yaml"
+    if not path.is_file():
+        return None
+    return yaml.safe_load(path.read_text())
+
+
 def suggest_tools(
     domain: str,
     schema: dict,
@@ -147,6 +170,18 @@ def suggest_tools_and_metadata(
         "storage": str, "fhir_resource": str, "terminology": str | None
     }
     """
+    # Golden domains: reuse committed blueprint on first pass (no LLM drift)
+    if not feedback:
+        golden = _load_golden_blueprint(domain)
+        if golden and golden.get("tools"):
+            metadata = {
+                "storage": golden.get("storage"),
+                "fhir_resource": golden.get("fhir_resource"),
+                "terminology": golden.get("terminology"),
+            }
+            logger.info("suggest_tools: using golden blueprint for %s", domain)
+            return golden["tools"], metadata
+
     try:
         from langchain_openai import ChatOpenAI
     except ImportError as exc:
