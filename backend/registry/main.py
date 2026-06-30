@@ -13,10 +13,10 @@ from datetime import datetime, timezone
 from fastapi import FastAPI, Depends, HTTPException
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import sessionmaker
-from sqlalchemy import select
+from sqlalchemy import select, delete
 
 from auth import require_valid_token
-from models import Base, MCPServer, HealthCheck, AuditEvent
+from models import Base, MCPServer, HealthCheck, AuditEvent, ToolSpec, RBACMapping
 
 DATABASE_URL = os.environ["DATABASE_URL"]
 
@@ -52,15 +52,29 @@ async def list_servers(
     """
     result = await db.execute(select(MCPServer))
     servers = result.scalars().all()
+    # aggregate per-server RBAC from rbac_mappings (joined via tool_specs)
+    rbac_rows = (await db.execute(
+        select(ToolSpec.server_id, RBACMapping.role_name, RBACMapping.required_scope)
+        .join(RBACMapping, RBACMapping.tool_id == ToolSpec.tool_id)
+        .where(RBACMapping.allowed.is_(True))
+    )).all()
+    roles_by_server: dict[int, set] = {}
+    scope_by_server: dict[int, str] = {}
+    for server_id, role_name, scope in rbac_rows:
+        roles_by_server.setdefault(server_id, set()).add(role_name)
+        if scope:
+            scope_by_server[server_id] = scope
     return [
         {
-            "server_id":   s.server_id,
-            "server_name": s.server_name,
-            "domain":      s.domain,
-            "status":      s.status,
-            "kong_route":  s.kong_route,
-            "port":        s.port,
-            "updated_at":  s.updated_at.isoformat() if s.updated_at else None,
+            "server_id":     s.server_id,
+            "server_name":   s.server_name,
+            "domain":        s.domain,
+            "status":        s.status,
+            "kong_route":    s.kong_route,
+            "port":          s.port,
+            "scope":         scope_by_server.get(s.server_id),
+            "allowed_roles": sorted(roles_by_server.get(s.server_id, [])),
+            "updated_at":    s.updated_at.isoformat() if s.updated_at else None,
         }
         for s in servers
     ]
@@ -112,6 +126,7 @@ async def register_server(
     if server:
         server.status     = payload.get("status", "healthy")
         server.kong_route = payload.get("kong_route", server.kong_route)
+        server.port       = payload.get("port", server.port)
         server.updated_at = datetime.now(timezone.utc)
     else:
         server = MCPServer(
@@ -122,6 +137,30 @@ async def register_server(
             port        = payload.get("port"),
         )
         db.add(server)
+    await db.flush()   # populate server.server_id
+
+    # Optional: tools + per-role RBAC from the blueprint (the build pipeline passes these).
+    # Stored in tool_specs + rbac_mappings so GET /servers can return allowed_roles.
+    tools = payload.get("tools") or []
+    rbac = payload.get("rbac") or {}            # {role_name: "allow"|"deny"}
+    scope = payload.get("scope")
+    if tools:
+        existing = (await db.execute(
+            select(ToolSpec).where(ToolSpec.server_id == server.server_id))).scalars().all()
+        for ts in existing:
+            await db.execute(delete(RBACMapping).where(RBACMapping.tool_id == ts.tool_id))
+            await db.delete(ts)
+        await db.flush()
+        for tname in tools:
+            ts = ToolSpec(server_id=server.server_id, tool_name=tname)
+            db.add(ts)
+            await db.flush()
+            for role, decision in rbac.items():
+                # rbac_mappings.role_name CHECK requires the group form (grp-<role>)
+                role_key = role if role.startswith("grp-") else f"grp-{role}"
+                db.add(RBACMapping(tool_id=ts.tool_id, role_name=role_key,
+                                   allowed=str(decision).lower() == "allow",
+                                   required_scope=scope))
 
     await db.commit()
     return {"message": f"Server '{server_name}' registered successfully"}

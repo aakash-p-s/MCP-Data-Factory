@@ -53,3 +53,7 @@ Thumbs.db
 
 # Logs
 *.log
+
+# Onboarding agent generated blueprints (keep the dir, not the output)
+backend/onboarding_agent/output/*
+!backend/onboarding_agent/output/.gitkeep

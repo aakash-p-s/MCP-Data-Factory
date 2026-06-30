@@ -18,6 +18,7 @@ _SQL_BACKENDS = {
     "vitals_trends": ("VITALS_DB_URL", "postgresql://postgres:changeme@localhost:5433/vitals"),
     "labs_diagnoses": ("CLINICAL_DB_URL", "postgresql://postgres:changeme@localhost:5434/clinical"),
     "medications_interactions": ("CLINICAL_DB_URL", "postgresql://postgres:changeme@localhost:5434/clinical"),
+    "radiology_reports": ("CLINICAL_DB_URL", "postgresql://postgres:changeme@localhost:5434/clinical"),  # onboarding-agent demo domain
 }
 
 _VECTOR_BACKENDS = {
