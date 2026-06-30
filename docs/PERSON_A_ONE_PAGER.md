@@ -13,6 +13,12 @@
 
 ```mermaid
 flowchart TB
+    subgraph BUILD["Build-time — onboarding factory"]
+        OA[onboarding_agent] --> BP[blueprint.yaml]
+        BP --> GEN[generate.py] --> SRV[server package]
+        BP --> REG[register.py] --> RA[(registry-api)]
+    end
+
     V([Clinician / Agent]) -->|badge = JWT| GATE
 
     subgraph GATE_LAYER["FRONT GATE — Kong (Layer 1)"]
@@ -23,16 +29,18 @@ flowchart TB
     GATE --> C2
     GATE --> C3
     GATE --> C4
+    GATE -.onboarded.-> C5
 
-    subgraph WING["THE WING — 4 clinics, same blueprint"]
+    subgraph WING["THE WING — MCP servers, same blueprint"]
         direction LR
-        C1["Vitals :8001<br/>nurse + physician<br/>trends - NEWS2 - abnormal"]
-        C2["Labs :8002<br/>nurse + physician<br/>lab trends - diagnoses"]
-        C3["Pharmacy :8003<br/>physician ONLY<br/>meds - interactions"]
-        C4["Records :8004<br/>physician + case-mgr<br/>semantic - recent notes"]
+        C1["Vitals :8001<br/>nurse + physician"]
+        C2["Labs :8002<br/>nurse + physician"]
+        C3["Pharmacy :8003<br/>physician ONLY"]
+        C4["Records :8004<br/>physician + case-mgr"]
+        C5["Radiology :8005<br/>factory demo"]
     end
 
-    subgraph KIT["DOOR KIT — Fixed Core (bolted into every clinic, Layer 2)"]
+    subgraph KIT["DOOR KIT — Fixed Core (Layer 2)"]
         direction LR
         K1[Badge reader<br/>auth + middleware]
         K2[Visitor logbook<br/>audit + purpose]
@@ -43,10 +51,14 @@ flowchart TB
 
     C1 & C2 & C3 -->|SQLConnector| CAB[(Filing cabinets<br/>TimescaleDB + Postgres)]
     C4 -->|VectorConnector| LIB[(Librarian by meaning<br/>Qdrant)]
+    C5 --> CAB
 
-    CAB & LIB -->|same standard form| FHIR[FHIR R4<br/>Observation / Condition /<br/>MedicationStatement / DocumentReference]
+    CAB & LIB -->|same standard form| FHIR[FHIR R4]
     FHIR --> V
 
+    RA -->|GET /servers| AG[Runtime Agent<br/>REGISTRY_DISCOVERY]
+    AG --> GATE
+    SRV --> C5
     WING -.every visit passes through.-> KIT
 ```
 

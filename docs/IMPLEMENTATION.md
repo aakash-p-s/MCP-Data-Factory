@@ -12,6 +12,39 @@ project overview and architecture, see [`README.md`](../README.md).
 >
 > Also: **the code is on the `person-a/phase-2` branch, not `main`.**
 
+### Architecture (runtime + onboarding bridge)
+
+Full diagrams: [`README.md`](../README.md) · [`ONBOARDING_RUNTIME_BRIDGE.md`](ONBOARDING_RUNTIME_BRIDGE.md)
+
+```mermaid
+flowchart LR
+    subgraph DATA["Person A — data + MCP servers"]
+        TS[(TimescaleDB :5433)]
+        PG[(Postgres :5434)]
+        QD[(Qdrant :6333)]
+        MCP[:8001–8004 host-run]
+        MCP --> TS & PG & QD
+    end
+
+    subgraph PLATFORM["Person B — platform"]
+        KC[Keycloak :8080]
+        KONG[Kong :8000]
+        RA[registry-api :8600]
+        AG[runtime agent :8500]
+        FE[frontend :3000]
+    end
+
+    subgraph FACTORY["Onboarding factory"]
+        OA[onboarding_agent] --> GEN[generate.py] --> MCP
+        OA --> REG[register.py] --> RA
+    end
+
+    FE --> AG
+    AG -->|GET /servers| RA
+    AG --> KONG --> MCP
+    KONG --> MCP
+```
+
 ---
 
 ## 0. Prerequisites

@@ -8,6 +8,14 @@ for everyone are called out so Person B / other machines can stay in sync. See
 
 ## 2026-07-01 — Onboarding ↔ runtime bridge (factory + discovery)
 
+```mermaid
+flowchart LR
+    BP[blueprint.yaml] --> GEN[generate.py] --> SRV[servers/domain/]
+    BP --> REG[register.py] --> RA[registry-api]
+    RA -->|GET /servers| AG[runtime_agent.py<br/>REGISTRY_DISCOVERY]
+    AG --> MCP[MCP tools via /ask]
+```
+
 ### New modules
 - **`backend/onboarding_agent/generate.py`** — approved blueprint → runnable
   `backend/servers/<domain>/` (main, tools scaffold, Dockerfile).

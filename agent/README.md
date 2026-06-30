@@ -9,21 +9,17 @@ MCP request, calls all 4 servers, and fuses results into one cited clinical risk
 
 ## What it does
 
-```
-Clinician question
-      ↓
-POST /ask (Bearer token)
-      ↓
-RuntimeAgent.ask()
-      ↓  opens 4 MCP clients simultaneously
-  vitals_trends       → Kong → :8001/mcp
-  labs_diagnoses      → Kong → :8002/mcp
-  medications_int     → Kong → :8003/mcp
-  clinical_notes      → Kong → :8004/mcp
-      ↓
-LLM synthesizes one cited answer
-      ↓
-"NEWS2 score 6 (vitals_trends); 3 drug interactions (medications_interactions)..."
+```mermaid
+flowchart TB
+    Q[Clinician question] --> ASK[POST /ask + Bearer JWT]
+    ASK --> DISC{REGISTRY_DISCOVERY?}
+    DISC -->|true| RA[GET /servers<br/>registry-api :8600]
+    RA -->|url + allowed_roles| CFG[MultiServerMCPClient config]
+    DISC -->|false| STATIC[Static URLs + frozen RBAC]
+    STATIC --> CFG
+    CFG --> MCP[MCP servers<br/>Kong or direct :8001–8005]
+    MCP --> LLM[LangGraph + gpt-4o fusion]
+    LLM --> ANS["Cited answer<br/>NEWS2 6 (vitals_trends) · …"]
 ```
 
 ---

@@ -13,9 +13,33 @@ Companion: [`ONBOARDING_RUNTIME_BRIDGE.md`](ONBOARDING_RUNTIME_BRIDGE.md) (conne
 testing), [`backend/onboarding_agent/README_CLI_TESTING.md`](../backend/onboarding_agent/README_CLI_TESTING.md),
 [`MCP_SERVERS.md`](MCP_SERVERS.md), [`HANDOVER_PERSON_B.md`](HANDOVER_PERSON_B.md).
 
-```
-pick a domain → discover schema → suggest tools (LLM) → draft RBAC → write blueprint.yaml
-  → human approves → generate.py → register.py → runtime agent discovers via GET /servers
+```mermaid
+flowchart LR
+    subgraph ONBOARD["Onboarding Agent — build-time"]
+        D[discover.py<br/>schema + FHIR heuristic]
+        S[suggest_tools.py<br/>LLM tool pairs]
+        R[draft_rbac.py<br/>role matrix]
+        A[assemble_blueprint.py]
+        CLI[main.py<br/>human approve / modify]
+        D --> S --> R --> A --> CLI
+    end
+
+    CLI -->|approved| BP[blueprint.yaml]
+    BP --> GEN[generate.py]
+    BP --> REG[register.py]
+
+    GEN --> SRV[backend/servers/domain/<br/>main · tools · Dockerfile]
+    REG -->|POST /servers| RA[registry-api :8600]
+    RA --> RDB[(registry-db)]
+
+    SRV -->|uv run main.py| MCP[:8001–8005 /mcp]
+
+    subgraph RUNTIME["Runtime Agent — every question"]
+        AG[runtime_agent.py<br/>POST /ask]
+        AG -->|REGISTRY_DISCOVERY| RA
+        RA -->|url + allowed_roles| AG
+        AG -->|Bearer JWT| MCP
+    end
 ```
 
 ---

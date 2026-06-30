@@ -1,8 +1,19 @@
 # Onboarding Agent — How to Run and Test (CLI)
 
 This covers the interactive CLI (`main.py`) — discover → suggest tools →
-draft RBAC → approve/reject loop. Output is always a `blueprint.yaml` file
-on disk. Nothing is ever deployed by this agent.
+draft RBAC → approve/reject loop. After approval, run **`generate.py`** then
+**`register.py`** to connect the new domain to the runtime agent
+(`REGISTRY_DISCOVERY=true`). See [`docs/ONBOARDING_RUNTIME_BRIDGE.md`](../../docs/ONBOARDING_RUNTIME_BRIDGE.md).
+
+```mermaid
+flowchart LR
+    MAIN[main.py CLI<br/>approve blueprint] --> BP[blueprint.yaml]
+    BP --> GEN[generate.py] --> SRV[backend/servers/domain/]
+    BP --> REG[register.py] --> RA[registry-api]
+    SRV --> RUN[uv run main.py]
+    RA --> AG[runtime agent<br/>discover_servers]
+    RUN --> AG
+```
 
 ---
 

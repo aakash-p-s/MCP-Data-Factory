@@ -28,25 +28,33 @@ The bridge closes that gap in **three steps**:
 | **2. Register** | `backend/onboarding_agent/register.py` | Blueprint → `registry-api POST /servers` → `registry-db` (URL, RBAC, tools) |
 | **3. Discover** | `agent/runtime_agent.py` | When `REGISTRY_DISCOVERY=true`, agent reads `GET /servers` instead of static URLs |
 
-```
-Build-time                              Control plane                    Runtime
-──────────                              ─────────────                    ───────
+```mermaid
+flowchart TB
+    subgraph BUILD["Build-time"]
+        OA[onboarding_agent/main.py<br/>discover · suggest · RBAC · approve]
+        OA --> BP[blueprint.yaml]
+        BP --> GEN[generate.py]
+        BP --> REG[register.py]
+        GEN --> SRV[backend/servers/domain/]
+        SRV --> RUN[uv run main.py · :8005]
+    end
 
-onboarding_agent/main.py
-  discover → suggest → RBAC → approve
-         │
-         ▼
-  blueprint.yaml ──► generate.py ──► backend/servers/<domain>/
-         │                                    │
-         │                                    │ uv run python …/main.py  (:8005)
-         ▼                                    ▼
-  register.py ──────────────► registry-api :8600 ──► registry-db
-         POST /servers              GET /servers ◄──────── runtime_agent.py
-         (tools + rbac)              (url + allowed_roles)   discover_servers()
-                                                              REGISTRY_DISCOVERY=true
-                                                                    │
-                                                                    ▼
-                                                              POST /ask  → MCP tools
+    subgraph CP["Control plane"]
+        REG -->|POST /servers<br/>tools + rbac + port| RA[registry-api :8600]
+        RA --> RDB[(registry-db)]
+    end
+
+    subgraph RUNTIME["Runtime — REGISTRY_DISCOVERY=true"]
+        FE[frontend POST /ask] --> AG[runtime_agent.py]
+        AG -->|client_credentials| RA
+        RA -->|GET /servers<br/>url + allowed_roles| AG
+        AG -->|user Bearer JWT| MCP[MCP servers<br/>direct or via Kong]
+        MCP --> FHIR[FHIR answer fused + cited]
+        FHIR --> FE
+    end
+
+    REG -.catalog.-> RA
+    RUN --> MCP
 ```
 
 ---
