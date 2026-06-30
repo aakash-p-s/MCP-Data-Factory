@@ -7,6 +7,8 @@
 
 Person A pushed integration fixes + **four DB-backed MCP servers** (all live on :8001–8004).
 Sync first or you'll build against stale state. Companion docs: [`HANDOVER_PERSON_B.md`](HANDOVER_PERSON_B.md) (contract),
+[`PERSON_B_FRONTEND.md`](PERSON_B_FRONTEND.md) (chat + dashboard + anomaly panel),
+[`ONBOARDING_RUNTIME_BRIDGE.md`](ONBOARDING_RUNTIME_BRIDGE.md) (onboarding → runtime bridge),
 [`CHANGELOG.md`](CHANGELOG.md) (what changed + commands), [`IMPLEMENTATION.md`](IMPLEMENTATION.md) (setup).
 
 Tick these top-to-bottom. Items marked **⚠ action** need you to actually do something.
@@ -140,7 +142,7 @@ Person A is done — your work starts here:
 - [ ] **Keycloak** — `scp` + `groups[]` mappers; flip `AUTH_VERIFY_SIGNATURE=true`
 - [ ] **Kong** — verify all 4 routes → `host.docker.internal:8001–8004`
 - [ ] **Runtime agent** — LangGraph + 4 MCP clients via Kong URLs (`:8500`)
-- [ ] **Frontend** — Next.js + CopilotKit + NextAuth (`:3000`)
+- [ ] **Frontend** — Next.js + CopilotKit + NextAuth (`:3000`) — see [`PERSON_B_FRONTEND.md`](PERSON_B_FRONTEND.md)
 - [ ] **Jul 3** — CopilotKit chat + OTel/Jaeger; CHECKPOINT
 - [x] **Jul 8** — unified `docker-compose.yml` (Person A merged)
 - [ ] **Jul 9** — integrated live demo (Person A keeps MCP servers up)

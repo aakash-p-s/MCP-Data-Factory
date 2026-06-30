@@ -13,12 +13,14 @@ FHIR R4 patient data ([Synthea](https://github.com/synthetichealth/synthea)) —
 **Docs index** (all in [`docs/`](docs/)): [`IMPLEMENTATION.md`](docs/IMPLEMENTATION.md) (setup, any OS) ·
 [`MCP_SERVERS.md`](docs/MCP_SERVERS.md) (how each server is built) ·
 [`ONBOARDING_AGENT.md`](docs/ONBOARDING_AGENT.md) (Person B: build-time agent guide) ·
+[`ONBOARDING_RUNTIME_BRIDGE.md`](docs/ONBOARDING_RUNTIME_BRIDGE.md) (onboarding → runtime connections + testing) ·
 [`INFRASTRUCTURE.md`](docs/INFRASTRUCTURE.md) (Kong, Keycloak, databases) ·
 [`DATA_CHECKING.md`](docs/DATA_CHECKING.md) (browse SQL + Qdrant in the browser) ·
 [`backend/README.md`](backend/README.md) (backend detail) ·
 [`CHANGELOG.md`](docs/CHANGELOG.md) (what changed + commands) ·
 [`PERSON_B_SYNC.md`](docs/PERSON_B_SYNC.md) (Person B: do-before-building checklist) ·
-[`HANDOVER_PERSON_B.md`](docs/HANDOVER_PERSON_B.md) (integration contract).
+[`HANDOVER_PERSON_B.md`](docs/HANDOVER_PERSON_B.md) (integration contract) ·
+[`PERSON_B_FRONTEND.md`](docs/PERSON_B_FRONTEND.md) (Person B: chat + dashboard + anomaly panel).
 
 ---
 
@@ -310,6 +312,7 @@ Required `.env` keys for frontend/agent (see `.env.example`):
 
 > Person B checklist before building UI: [`PERSON_B_SYNC.md`](docs/PERSON_B_SYNC.md).
 > Integration contract (routes, scopes, RBAC): [`HANDOVER_PERSON_B.md`](docs/HANDOVER_PERSON_B.md).
+> Frontend build spec: [`PERSON_B_FRONTEND.md`](docs/PERSON_B_FRONTEND.md).
 
 ### Split compose files (legacy partial runs)
 
@@ -689,7 +692,8 @@ tool calls on all four servers.
 | Onboarding agent (build-time) | — | Person B (later) |
 
 Person B starts with [`docs/PERSON_B_SYNC.md`](docs/PERSON_B_SYNC.md) then
-[`docs/HANDOVER_PERSON_B.md`](docs/HANDOVER_PERSON_B.md).
+[`docs/HANDOVER_PERSON_B.md`](docs/HANDOVER_PERSON_B.md). Frontend:
+[`docs/PERSON_B_FRONTEND.md`](docs/PERSON_B_FRONTEND.md).
 
 ### What Person A must keep available for integration
 

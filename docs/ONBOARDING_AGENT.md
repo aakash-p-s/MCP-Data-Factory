@@ -2,15 +2,20 @@
 
 The **onboarding agent** (`backend/onboarding_agent/`) is a **build-time** process, run once
 per new domain. It discovers a source's schema, suggests an MCP tool set, drafts RBAC, and
-writes a `blueprint.yaml` — its **only output**. It never deploys anything; a human approves
-the YAML, then the existing hardened template (Person A's `backend/servers/*`) generates the
-server. **Not built yet — this is Person B's deliverable.**
+writes a `blueprint.yaml`. A human approves the YAML; **`generate.py`** instantiates the
+server package and **`register.py`** records it in registry-db so the **runtime agent** can
+discover it when `REGISTRY_DISCOVERY=true`.
 
-Companion: [`MCP_SERVERS.md`](MCP_SERVERS.md) (how a server is built),
-[`HANDOVER_PERSON_B.md`](HANDOVER_PERSON_B.md) (the frozen contract).
+**Status:** pipeline + CLI **done**; factory bridge (`generate`, `register`) + runtime
+discovery **done**; frontend approval UI still pending.
+
+Companion: [`ONBOARDING_RUNTIME_BRIDGE.md`](ONBOARDING_RUNTIME_BRIDGE.md) (connections +
+testing), [`backend/onboarding_agent/README_CLI_TESTING.md`](../backend/onboarding_agent/README_CLI_TESTING.md),
+[`MCP_SERVERS.md`](MCP_SERVERS.md), [`HANDOVER_PERSON_B.md`](HANDOVER_PERSON_B.md).
 
 ```
-pick a domain → discover schema → suggest tools (LLM) → draft RBAC → write blueprint.yaml → human approves
+pick a domain → discover schema → suggest tools (LLM) → draft RBAC → write blueprint.yaml
+  → human approves → generate.py → register.py → runtime agent discovers via GET /servers
 ```
 
 ---
