@@ -81,13 +81,15 @@
         {
           "name": "scp-mapper",
           "protocol": "openid-connect",
-          "protocolMapper": "oidc-hardcoded-claim-mapper",
+          "protocolMapper": "oidc-usermodel-attribute-mapper",
           "config": {
-            "claim.value": "mcp.vitals.read mcp.labs.read mcp.meds.read mcp.notes.read",
+            "user.attribute": "mcp_scopes",
+            "claim.name": "scp",
+            "jsonType.label": "String",
             "id.token.claim": "false",
             "access.token.claim": "true",
-            "claim.name": "scp",
-            "userinfo.token.claim": "false"
+            "userinfo.token.claim": "false",
+            "multivalued": "false"
           }
         }
       ]
@@ -132,7 +134,12 @@
       ],
       "groups": [
         "grp-clinical-viewer"
-      ]
+      ],
+      "attributes": {
+        "mcp_scopes": [
+          "mcp.vitals.read mcp.labs.read"
+        ]
+      }
     },
     {
       "username": "doctor-test",
@@ -149,7 +156,12 @@
       ],
       "groups": [
         "grp-physician"
-      ]
+      ],
+      "attributes": {
+        "mcp_scopes": [
+          "mcp.vitals.read mcp.labs.read mcp.meds.read mcp.notes.read"
+        ]
+      }
     },
     {
       "username": "casemanager-test",
@@ -166,7 +178,12 @@
       ],
       "groups": [
         "grp-case-manager"
-      ]
+      ],
+      "attributes": {
+        "mcp_scopes": [
+          "mcp.notes.read"
+        ]
+      }
     }
   ],
   "components": {
