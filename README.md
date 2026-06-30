@@ -81,60 +81,67 @@ Key properties:
 flowchart TB
     subgraph BUILD["Phase 1 — Build-Time (once per domain)"]
         direction LR
-        U1[Onboarding User<br/>picks a domain] --> OA[Onboarding Agent<br/>discover - suggest tools<br/>draft RBAC - assemble YAML]
-        OA --> HA{Human Approver<br/>verifies ownership<br/>and RBAC}
-        HA -->|approve| GEN[Generate from<br/>hardened template]
+        U1[Onboarding User<br/>picks a domain] --> OA[Onboarding Agent<br/>discover · suggest tools<br/>draft RBAC · assemble YAML]
+        OA --> HA{Human Approver<br/>CLI or ApprovalCard}
+        HA -->|approve| GEN[generate.py<br/>blueprint → server package]
         HA -->|reject| OA
-        GEN --> REG[Register: Kong route<br/>and catalog entry]
+        GEN --> START[Start MCP server<br/>host :8001–8005]
+        GEN --> REG[register.py<br/>POST /servers → registry-db]
+        REG -.Kong route still manual.-> KONG_CFG[infra/kong/kong.yml]
     end
 
     subgraph RUNTIME["Phase 2 — Runtime (every clinical question)"]
         direction TB
-        USER([Clinician]) --> FE[Frontend<br/>Next.js + CopilotKit<br/>NextAuth/Keycloak login]
-        FE -->|Bearer JWT| AGENT[Runtime Agent<br/>LangGraph Host<br/>4 MCP Clients]
-        AGENT -->|token + tool call| KONG[Kong API Gateway<br/>Layer 1: validate JWT<br/>tiered rate limit - route]
-        KONG -->|401 invalid / 429 over-quota| FE
+        USER([Clinician]) --> FE[Frontend :3000<br/>Next.js + CopilotKit<br/>NextAuth / Keycloak]
+        FE -->|Bearer JWT| AGENT[Runtime Agent :8500<br/>LangGraph · POST /ask]
+        AGENT -->|REGISTRY_DISCOVERY=true| RA[registry-api :8600<br/>GET /servers]
+        RA -->|url + allowed_roles| AGENT
+        AGENT -->|token + tool call| KONG[Kong :8000<br/>Layer 1 JWT · rate-limit · route]
+        KONG -->|401 / 429| FE
+        AGENT -.DISCOVERY_VIA=direct.-> S1
 
-        KONG --> S1[vitals_trends<br/>mcp.vitals.read]
-        KONG --> S2[labs_diagnoses<br/>mcp.labs.read]
-        KONG --> S3[medications_interactions<br/>mcp.meds.read]
-        KONG --> S4[clinical_notes_search<br/>mcp.notes.read]
+        KONG --> S1[vitals_trends :8001]
+        KONG --> S2[labs_diagnoses :8002]
+        KONG --> S3[medications_interactions :8003]
+        KONG --> S4[clinical_notes_search :8004]
+        KONG -.new domain.-> S5[radiology_reports :8005]
 
-        S1 & S2 & S3 & S4 -->|Layer 2: re-verify JWT<br/>scope check per tool| AUTHZ{allowed?}
-        AUTHZ -->|deny| D403[403 - missing scope reason]
-        AUTHZ -->|allow| CONN[Pluggable Connector Layer]
+        S1 & S2 & S3 & S4 & S5 -->|Layer 2 JWT + scope RBAC| AUTHZ{allowed?}
+        AUTHZ -->|deny| D403[403 — missing scope]
+        AUTHZ -->|allow| CONN[Connector layer<br/>SQL or Vector]
 
-        CONN --> SQL[SQLConnector]
-        CONN --> VEC[VectorConnector]
-        SQL --> TS[(TimescaleDB<br/>vitals)]
-        SQL --> PG[(Postgres<br/>labs - diagnoses - meds)]
-        VEC --> QD[(Qdrant<br/>clinical notes)]
+        CONN --> TS[(TimescaleDB :5433)]
+        CONN --> PG[(Postgres :5434)]
+        CONN --> QD[(Qdrant :6333)]
 
-        TS & PG & QD -->|FHIR R4 resources| FUSE[Agent fuses + cites:<br/>'NEWS2 6 vitals - 3 interactions meds<br/>- fall-risk note notes']
+        TS & PG & QD -->|FHIR R4| FUSE[Agent fuses + cites answer]
         D403 --> FUSE
         FUSE --> USER
     end
 
-    subgraph TRUST["Phase 3 — Trust, Security & Observability (applied throughout)"]
+    subgraph TRUST["Phase 3 — Trust & Observability"]
         direction LR
-        T1[audit.py<br/>+ purpose_of_access enum]
-        T2[egress_guard.py<br/>SSRF / egress lock]
-        T3[cache.py<br/>30s TTL]
-        T4[telemetry.py<br/>OpenTelemetry trace]
-        T5[Self-healing<br/>tenacity + restart policies]
+        T1[audit.py + purpose enum]
+        T2[egress_guard.py]
+        T3[cache.py 30s]
+        T4[telemetry → Jaeger]
+        T5[self-healing]
     end
 
-    REG -.deploys.-> RUNTIME
+    REG -.catalog entry.-> RA
     RUNTIME -.every call.-> TRUST
+    FE -->|GET /servers · GET /audit| RA
 ```
 
 ### Reading the diagram
 
-- **Build-time** runs once per domain: an agent proposes a blueprint, a human approves it, the
-  hardened template generates the server, and it's registered (Kong route + catalog).
-- **Runtime** is the live path: clinician → frontend → LangGraph agent → Kong (Layer 1) → the
-  four MCP servers (Layer 2 RBAC) → connectors → data stores → fused, cited FHIR answer.
-- **Trust** controls (audit, egress guard, cache, telemetry, self-healing) wrap every call.
+- **Build-time** runs once per domain: onboarding agent → human approves → **`generate.py`**
+  creates the server package → **`register.py`** writes registry-db (Kong route in `kong.yml`
+  is still a manual step).
+- **Runtime**: clinician → frontend → runtime agent → **`GET /servers`** when
+  `REGISTRY_DISCOVERY=true` → Kong (or direct port) → MCP servers → fused cited answer.
+- **Trust** controls wrap every call; audit rows feed the dashboard anomaly panel via
+  `GET /audit`.
 
 ---
 
@@ -146,23 +153,29 @@ How Docker services, Kong, and the host-run MCP servers connect at runtime (deta
 ```mermaid
 flowchart LR
     U([Clinician]) --> FE[frontend :3000<br/>NextAuth]
-    FE -->|login| KC[(keycloak :8080<br/>realm patient-risk)]
+    FE -->|login| KC[(keycloak :8080)]
     KC -->|signed JWT| FE
-    FE -->|Bearer JWT| AG[agent :8500<br/>LangGraph + MCP clients]
-    AG -->|/mcp/clinical/*/dev| KONG[kong :8000<br/>Layer-1 gateway]
+    FE -->|POST /ask + Bearer| AG[agent :8500<br/>discover_servers]
+    FE -->|GET /servers · /audit| RA[registry-api :8600]
+    AG -->|GET /servers<br/>REGISTRY_DISCOVERY| RA
+    RA --> RDB[(registry-db :5435)]
+    AG -->|DISCOVERY_VIA=kong| KONG[kong :8000]
+    AG -.DISCOVERY_VIA=direct.-> V
 
-    KONG -->|validate JWT signature<br/>via pinned realm key<br/>rate-limit, route| V[vitals_trends :8001]
-    KONG --> L[labs_diagnoses :8002]
-    KONG --> M[medications_interactions :8003]
-    KONG --> N[clinical_notes_search :8004]
+    KONG --> V[vitals :8001]
+    KONG --> L[labs :8002]
+    KONG --> M[meds :8003]
+    KONG --> N[notes :8004]
+    KONG -.onboarded.-> R[radiology :8005]
 
     V --> TS[(timescaledb :5433)]
     L --> PG[(postgres :5434)]
     M --> PG
     N --> QD[(qdrant :6333)]
+    R --> PG
 
-    AG -->|register / health| RA[registry-api :8600] --> RDB[(registry-db :5435)]
     KONG -.OTel.-> J[jaeger :16686]
+    RA -.audit rows.-> RDB
 ```
 
 **Two security layers:** Kong is **Layer 1** (is the token valid? not over quota? route it).

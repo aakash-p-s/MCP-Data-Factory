@@ -42,14 +42,14 @@ Companion docs (read these first):
 
 ### Dependency order (recommended)
 
-```
-1. PERSON_B_SYNC checklist          (Keycloak tokens work end-to-end)
-2. Runtime agent /ask smoke test    (curl with Bearer token)
-3. Frontend scaffold + NextAuth     (login page works)
-4. Chat page                        (calls /ask)
-5. Dashboard + RegistryTable        (calls GET /servers)
-6. Anomaly panel                    (calls GET /audit)
-7. docker compose --profile full    (containerized demo)
+```mermaid
+flowchart TD
+    S1[PERSON_B_SYNC checklist] --> S2[Runtime agent /ask smoke]
+    S2 --> S3[NextAuth login]
+    S3 --> S4["/chat — POST /ask"]
+    S4 --> S5["/dashboard — GET /servers"]
+    S5 --> S6["Anomaly panel — GET /audit"]
+    S6 --> S7["docker compose --profile full"]
 ```
 
 ---
@@ -67,6 +67,34 @@ Companion docs (read these first):
 
 Pin versions in `frontend/package.json`. The MCP SDK version is irrelevant here; the frontend
 never speaks MCP directly — it calls the runtime agent and registry-api over HTTP.
+
+### Frontend auth + data flow
+
+```mermaid
+flowchart TB
+    U([Clinician]) --> FE[Next.js frontend :3000]
+    FE -->|OIDC login| NA[NextAuth]
+    NA --> KC[(Keycloak :8080)]
+    KC -->|accessToken JWT| NA
+    NA --> FE
+
+    subgraph CHAT["/chat — CopilotKit"]
+        FE -->|POST /ask + Bearer| AG[runtime agent :8500]
+        AG -->|discover_servers| RA
+        AG -->|MCP tool calls| MCP[MCP servers]
+        MCP --> AG
+        AG -->|cited answer| FE
+    end
+
+    subgraph DASH["/dashboard — Tremor"]
+        FE -->|GET /servers| RA[registry-api :8600]
+        FE -->|GET /audit| RA
+        FE -->|trace links| J[Jaeger :16686]
+        RA --> RDB[(registry-db)]
+    end
+
+    FE -->|purpose_of_access selector| CHAT
+```
 
 ---
 

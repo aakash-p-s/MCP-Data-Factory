@@ -5,51 +5,75 @@ flowchart TB
     classDef store fill:#bbf7d0,stroke:#15803d,color:#1f2937;
     classDef out fill:#fbcfe8,stroke:#be185d,color:#1f2937;
     classDef actor fill:#f1f5f9,stroke:#475569,color:#1f2937;
+    classDef build fill:#fef3c7,stroke:#d97706,color:#1f2937;
+    classDef cp fill:#ddd6fe,stroke:#6d28d9,color:#1f2937;
 
-    V([Clinician / LangGraph Agent]):::actor
-    KC[(Keycloak :8080<br/>realm patient-risk<br/>signs JWT: scp + groups)]:::actor
-    V -->|login| KC
-    KC -->|Bearer JWT| V
+    subgraph BUILD["BUILD-TIME — onboarding factory (once per domain)"]
+        OA[onboarding_agent<br/>discover · suggest · RBAC · approve]:::build
+        OA --> BP[blueprint.yaml]:::build
+        BP --> GEN[generate.py]:::build
+        BP --> REG[register.py]:::build
+        GEN --> SRV[backend/servers/domain/]:::build
+        REG --> RA[(registry-api :8600)]:::cp
+        RA --> RDB[(registry-db)]:::cp
+    end
 
-    V -->|POST /mcp + Bearer JWT| GATE
+    U([Clinician]):::actor
+    FE[frontend :3000<br/>NextAuth · CopilotKit]:::actor
+    AG[runtime agent :8500<br/>POST /ask · discover_servers]:::actor
+    KC[(Keycloak :8080<br/>JWT: scp + groups)]:::actor
+
+    U --> FE
+    FE -->|login| KC
+    KC -->|Bearer JWT| FE
+    FE -->|POST /ask| AG
+    FE -->|GET /servers · /audit| RA
+    AG -->|REGISTRY_DISCOVERY<br/>GET /servers| RA
+    RA -->|url + allowed_roles| AG
+
+    AG -->|DISCOVERY_VIA=kong| GATE
+    AG -.DISCOVERY_VIA=direct.-> C1
 
     subgraph GATE_LAYER["FRONT GATE — Kong :8000 (Layer 1)"]
-        GATE[Valid signature? Under quota?<br/>Route to the right clinic]:::gate
+        GATE[Valid signature? Under quota?<br/>Route to clinic]:::gate
     end
-    GATE -->|401 invalid / 429 over-quota| V
+    GATE -->|401 / 429| FE
 
     GATE --> C1
     GATE --> C2
     GATE --> C3
     GATE --> C4
+    GATE -.onboarded.-> C5
 
-    subgraph WING["THE WING — 4 MCP servers, one hardened blueprint"]
+    subgraph WING["THE WING — MCP servers, one hardened blueprint"]
         direction LR
-        C1["vitals_trends :8001<br/>nurse + physician<br/>get_vitals_trend / NEWS2 / abnormal"]:::clinic
-        C2["labs_diagnoses :8002<br/>nurse + physician<br/>lab_trend / diagnoses"]:::clinic
-        C3["medications :8003<br/>physician ONLY<br/>meds / interactions / polypharmacy"]:::clinic
-        C4["clinical_notes :8004<br/>physician + case-manager<br/>semantic / recent / by_type"]:::clinic
+        C1["vitals_trends :8001<br/>nurse + physician"]:::clinic
+        C2["labs_diagnoses :8002<br/>nurse + physician"]:::clinic
+        C3["medications :8003<br/>physician ONLY"]:::clinic
+        C4["clinical_notes :8004<br/>physician + case-mgr"]:::clinic
+        C5["radiology_reports :8005<br/>onboarded demo"]:::clinic
     end
 
-    subgraph KIT["DOOR KIT — Fixed Core, bolted into every server (Layer 2)"]
+    subgraph KIT["DOOR KIT — Fixed Core (Layer 2)"]
         direction LR
-        K1[auth + middleware<br/>re-verify JWT + scope]:::kit
+        K1[auth + middleware]:::kit
         K2[audit + purpose_of_access]:::kit
-        K3[egress_guard<br/>locked DSN]:::kit
-        K4[cache 30s TTL]:::kit
-        K5[self_healing<br/>tenacity retry]:::kit
+        K3[egress_guard]:::kit
+        K4[cache 30s]:::kit
+        K5[self_healing]:::kit
     end
 
-    C1 & C2 & C3 & C4 -->|allowed?| AZ{scope + group<br/>RBAC check}:::kit
-    AZ -->|deny| D403[403 forbidden<br/>missing scope / role]:::out
-    AZ -->|allow| CONN[Pluggable connector layer]:::kit
+    C1 & C2 & C3 & C4 & C5 -->|scope + group RBAC| AZ{allowed?}:::kit
+    AZ -->|deny| D403[403 forbidden]:::out
+    AZ -->|allow| CONN[Connector layer]:::kit
 
-    CONN -->|SQLConnector| CAB[(TimescaleDB :5433 vitals<br/>Postgres :5434 labs/dx/meds)]:::store
-    CONN -->|VectorConnector| LIB[(Qdrant :6333<br/>clinical notes embeddings)]:::store
+    CONN -->|SQLConnector| CAB[(TimescaleDB :5433<br/>Postgres :5434)]:::store
+    CONN -->|VectorConnector| LIB[(Qdrant :6333)]:::store
 
-    CAB & LIB -->|rows| FHIR[FHIR R4 resources<br/>Observation / Condition /<br/>MedicationStatement / DocumentReference]:::out
-    FHIR --> FUSE[Agent fuses + cites:<br/>NEWS2 6 vitals · 3 interactions meds ·<br/>fall-risk note notes]:::out
+    CAB & LIB --> FHIR[FHIR R4 resources]:::out
+    FHIR --> FUSE[Agent fuses + cites answer]:::out
     D403 --> FUSE
-    FUSE --> V
+    FUSE --> U
 
-    WING -.every call passes through.-> KIT
+    SRV --> C5
+    WING -.every call.-> KIT
