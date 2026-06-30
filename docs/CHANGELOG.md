@@ -6,6 +6,40 @@ for everyone are called out so Person B / other machines can stay in sync. See
 
 ---
 
+## 2026-07-01 — Onboarding ↔ runtime bridge (factory + discovery)
+
+### New modules
+- **`backend/onboarding_agent/generate.py`** — approved blueprint → runnable
+  `backend/servers/<domain>/` (main, tools scaffold, Dockerfile).
+- **`backend/onboarding_agent/register.py`** — blueprint → `registry-api POST /servers`
+  (tools, RBAC, port, kong_route); `--health` sweep → `health_checks` table.
+
+### Runtime agent
+- **`agent/runtime_agent.py`** — `discover_servers()` reads `GET /servers` when
+  `REGISTRY_DISCOVERY=true`; data-driven RBAC in `_build_server_config()`.
+- Env: `REGISTRY_DISCOVERY`, `REGISTRY_URL`, `DISCOVERY_VIA` (`direct` \| `kong`).
+
+### Demo domain
+- **`radiology_reports`** — onboarding CLI tested; server generated on `:8005`;
+  egress guard entry added; blueprint in `backend/onboarding_agent/output/`.
+
+### Tests + docs
+- **`backend/tests/test_onboarding_agent.py`** — 10 golden-file RBAC tests passing.
+- **`backend/onboarding_agent/README_CLI_TESTING.md`** — full CLI walkthrough.
+- **`docs/ONBOARDING_RUNTIME_BRIDGE.md`** — bridge architecture, recent updates, test commands.
+
+### Enable discovery locally
+```bash
+# .env
+REGISTRY_DISCOVERY=true
+DISCOVERY_VIA=direct
+
+uv run python -m backend.onboarding_agent.register --all
+uv run uvicorn agent.runtime_agent:app --host 0.0.0.0 --port 8500
+```
+
+---
+
 ## 2026-06-28 — Person A handoff complete (docs + GitHub)
 
 ### Delivery status
