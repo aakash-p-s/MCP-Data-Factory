@@ -22,7 +22,9 @@ import os
 from pathlib import Path
 
 from dotenv import load_dotenv
-load_dotenv(override=True)
+# override=False so real env (Docker Compose / shell) wins over the .env file —
+# lets the deployment environment pick the right URLs without hand-editing .env.
+load_dotenv(override=False)
 
 from fastapi import FastAPI, Header, HTTPException
 from pydantic import BaseModel
@@ -35,21 +37,14 @@ from prompts import SYNTHESIS_PROMPT
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
-# MCP server URLs — Kong routes (Mode B: full path through gateway).
-# Falls back to host.docker.internal for local dev without Kong.
+# MCP server URLs. Default = DIRECT to each server on the host (works out of the box for
+# a host-run agent). For the full gateway path set the *_MCP_URL envs to Kong routes, or
+# use registry discovery with DISCOVERY_VIA=kong. Docker Compose injects host.docker.internal.
 # ---------------------------------------------------------------------------
-VITALS_URL = os.environ.get(
-    "VITALS_MCP_URL", "http://localhost:8000/mcp/clinical/vitals-trends/dev"
-)
-LABS_URL = os.environ.get(
-    "LABS_MCP_URL", "http://localhost:8000/mcp/clinical/labs-diagnoses/dev"
-)
-MEDS_URL = os.environ.get(
-    "MEDS_MCP_URL", "http://localhost:8000/mcp/clinical/medications-interactions/dev"
-)
-NOTES_URL = os.environ.get(
-    "NOTES_MCP_URL", "http://localhost:8000/mcp/clinical/clinical-notes-search/dev"
-)
+VITALS_URL = os.environ.get("VITALS_MCP_URL", "http://localhost:8001/mcp")
+LABS_URL = os.environ.get("LABS_MCP_URL", "http://localhost:8002/mcp")
+MEDS_URL = os.environ.get("MEDS_MCP_URL", "http://localhost:8003/mcp")
+NOTES_URL = os.environ.get("NOTES_MCP_URL", "http://localhost:8004/mcp")
 
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "")
 
@@ -75,6 +70,15 @@ _STATIC_URLS = {
     "medications_interactions": MEDS_URL,
     "clinical_notes_search": NOTES_URL,
 }
+# Frozen RBAC matrix (§6.3) used as the fallback when registry discovery is off.
+# Group form (grp-<role>) to match the caller's Keycloak `groups` and the registry's
+# rbac_mappings.role_name directly — no name juggling.
+_STATIC_RBAC = {
+    "vitals_trends": {"grp-clinical-viewer", "grp-physician"},
+    "labs_diagnoses": {"grp-clinical-viewer", "grp-physician"},
+    "medications_interactions": {"grp-physician"},
+    "clinical_notes_search": {"grp-physician", "grp-case-manager"},
+}
 
 
 def _registry_service_token() -> str:
@@ -87,33 +91,42 @@ def _registry_service_token() -> str:
     return r.json()["access_token"]
 
 
+def discover_servers() -> dict[str, dict]:
+    """{domain: {"url":..., "allowed_roles": set}}. From registry-api when
+    REGISTRY_DISCOVERY (URL + RBAC both live), else the static URLs + frozen matrix."""
+    if REGISTRY_DISCOVERY:
+        try:
+            import httpx
+            token = _registry_service_token()
+            r = httpx.get(f"{REGISTRY_URL}/servers",
+                          headers={"Authorization": f"Bearer {token}"}, timeout=5)
+            r.raise_for_status()
+            out: dict[str, dict] = {}
+            for s in r.json():
+                domain = s.get("domain")
+                if not domain:
+                    continue
+                if DISCOVERY_VIA == "kong" and s.get("kong_route"):
+                    url = f"{KONG_BASE}{s['kong_route']}"
+                elif s.get("port"):
+                    url = f"http://localhost:{s['port']}/mcp"
+                else:
+                    continue
+                out[domain] = {"url": url, "allowed_roles": set(s.get("allowed_roles") or [])}
+            if out:
+                logging.getLogger("runtime-agent").info(
+                    "registry discovery: %d servers %s", len(out), sorted(out))
+                return out
+        except Exception as exc:
+            logging.getLogger("runtime-agent").warning(
+                "registry discovery failed (%s) — falling back to static", exc)
+    return {d: {"url": u, "allowed_roles": set(_STATIC_RBAC.get(d, set()))}
+            for d, u in _STATIC_URLS.items()}
+
+
 def resolve_server_urls() -> dict[str, str]:
-    """{domain: mcp_url}. From registry-api when REGISTRY_DISCOVERY, else static env."""
-    if not REGISTRY_DISCOVERY:
-        return dict(_STATIC_URLS)
-    try:
-        import httpx
-        token = _registry_service_token()
-        r = httpx.get(f"{REGISTRY_URL}/servers",
-                      headers={"Authorization": f"Bearer {token}"}, timeout=5)
-        r.raise_for_status()
-        urls: dict[str, str] = {}
-        for s in r.json():
-            domain = s.get("domain")
-            if not domain:
-                continue
-            if DISCOVERY_VIA == "kong" and s.get("kong_route"):
-                urls[domain] = f"{KONG_BASE}{s['kong_route']}"
-            elif s.get("port"):
-                urls[domain] = f"http://localhost:{s['port']}/mcp"
-        if urls:
-            logging.getLogger("runtime-agent").info(
-                "registry discovery: %d servers %s", len(urls), sorted(urls))
-            return urls
-    except Exception as exc:
-        logging.getLogger("runtime-agent").warning(
-            "registry discovery failed (%s) — falling back to static URLs", exc)
-    return dict(_STATIC_URLS)
+    """Thin {domain: url} view of discover_servers() (kept for callers/tests)."""
+    return {d: info["url"] for d, info in discover_servers().items()}
 
 
 # ---------------------------------------------------------------------------
@@ -191,40 +204,21 @@ def _build_server_config(token: str, groups: list[str] | None = None) -> dict:
         "Content-Type": "application/json",
     }
 
-    # RBAC matrix from PRD §6.3
-    # clinical-viewer: vitals + labs only
-    # physician: all 4
-    # case-manager: notes only
-    is_physician       = "grp-physician" in (groups or [])
-    is_case_manager    = "grp-case-manager" in (groups or [])
-    is_clinical_viewer = "grp-clinical-viewer" in (groups or [])
-
-    # URL source: registry-api discovery (opt-in) or static env — same RBAC filtering either way
-    urls = resolve_server_urls()
+    # RBAC is now data-driven: discover_servers() yields each server's url + allowed_roles
+    # (from registry-api when REGISTRY_DISCOVERY, else the frozen §6.3 matrix). A server is
+    # included only if the caller's roles intersect its allowed_roles — so a newly
+    # onboarded+registered domain is auto-callable for the roles its blueprint allows.
+    caller_groups = set(groups or [])
     servers = {}
+    for domain, info in discover_servers().items():
+        if info.get("url") and caller_groups & info.get("allowed_roles", set()):
+            servers[domain] = {"url": info["url"], "transport": "streamable_http", "headers": headers}
 
-    def _add(domain: str, allowed: bool) -> None:
-        if allowed and urls.get(domain):
-            servers[domain] = {"url": urls[domain], "transport": "streamable_http", "headers": headers}
-
-    _add("vitals_trends", is_physician or is_clinical_viewer)
-    _add("labs_diagnoses", is_physician or is_clinical_viewer)
-    _add("medications_interactions", is_physician)
-    _add("clinical_notes_search", is_physician or is_case_manager)
-
-    # fallback — if no groups matched, connect to all (anonymous/POC)
-    if not servers:
-        for name, url in [
-            ("vitals_trends", VITALS_URL),
-            ("labs_diagnoses", LABS_URL),
-            ("medications_interactions", MEDS_URL),
-            ("clinical_notes_search", NOTES_URL),
-        ]:
-            servers[name] = {
-                "url": url,
-                "transport": "streamable_http",
-                "headers": headers,
-            }
+    # fallback — no groups on the token (anonymous/POC service account): connect to all known
+    if not servers and not caller_groups:
+        for domain, info in discover_servers().items():
+            if info.get("url"):
+                servers[domain] = {"url": info["url"], "transport": "streamable_http", "headers": headers}
 
     return servers
 

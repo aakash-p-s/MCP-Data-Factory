@@ -58,6 +58,9 @@ def register_blueprint(blueprint_path: str | Path, token: str | None = None) -> 
         "status": "healthy",
         "kong_route": bp.get("kong_route"),
         "port": DOMAIN_PORT.get(domain),
+        "scope": bp.get("scope"),
+        "tools": [t["name"] for t in bp.get("tools", []) if t.get("name")],
+        "rbac": bp.get("rbac", {}),   # {role_name: allow|deny} → tool_specs + rbac_mappings
     }
     token = token or service_token()
     r = httpx.post(f"{REGISTRY_URL}/servers", json=payload,
