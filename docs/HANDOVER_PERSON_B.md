@@ -38,6 +38,26 @@ bash scripts/start_mcp_servers.sh
 **Person B builds next:** Keycloak scope/group mappers → Kong upstreams → runtime agent
 (`:8500`) → frontend (`:3000`). Start with [`PERSON_B_SYNC.md`](PERSON_B_SYNC.md).
 
+```mermaid
+flowchart TB
+    subgraph BUILD["Build-time — onboarding bridge (done)"]
+        OA[onboarding_agent CLI] --> BP[blueprint.yaml]
+        BP --> GEN[generate.py] --> SRV[MCP server package]
+        BP --> REG[register.py] --> RA[registry-api :8600]
+    end
+
+    subgraph RUNTIME["Runtime — integration target"]
+        FE[frontend :3000] -->|POST /ask| AG[runtime agent :8500]
+        AG -->|GET /servers| RA
+        AG --> KONG[Kong :8000]
+        KONG --> MCP[:8001–8004 MCP servers]
+        AG -.direct discovery.-> MCP
+    end
+
+    SRV --> MCP
+    REG --> RA
+```
+
 ### Demo patient (direct MCP calls)
 
 MCP tools expect the **Synthea UUID**, not the friendly alias. Resolve via
@@ -193,8 +213,14 @@ If Person B runs Kong/agent in Docker and the servers on the host:
 
 ### Mode B — Full path (target runtime)
 
-```
-Clinician → Frontend → Runtime Agent → Kong → MCP server (:8001–8004)
+```mermaid
+flowchart LR
+    U([Clinician]) --> FE[Frontend :3000]
+    FE -->|Bearer JWT| AG[Runtime Agent :8500]
+    AG -->|GET /servers| RA[registry-api]
+    AG --> KONG[Kong :8000]
+    KONG --> MCP[MCP server :8001–8004]
+    AG -.DISCOVERY_VIA=direct.-> MCP
 ```
 
 - Kong (Layer 1): validate JWT, rate-limit, route to `/mcp/clinical/<domain>/dev`.

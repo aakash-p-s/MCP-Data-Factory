@@ -32,24 +32,43 @@ Companion: [`MCP_SERVERS.md`](MCP_SERVERS.md) (the servers that sit between Kong
 
 ```mermaid
 flowchart LR
-    U([Clinician]) --> FE[frontend :3000<br/>NextAuth]
-    FE -->|login| KC[(keycloak :8080<br/>realm patient-risk)]
-    KC -->|signed JWT| FE
-    FE -->|Bearer JWT| AG[agent :8500<br/>LangGraph + MCP clients]
-    AG -->|/mcp/clinical/*/dev| KONG[kong :8000<br/>Layer-1 gateway]
+    U([Clinician]) --> FE[frontend :3000<br/>NextAuth · CopilotKit]
+    FE -->|login| KC[(keycloak :8080)]
+    KC -->|JWT| FE
+    FE -->|POST /ask| AG[agent :8500]
+    FE -->|GET /servers · /audit| RA[registry-api :8600]
+    AG -->|GET /servers<br/>REGISTRY_DISCOVERY| RA
+    RA --> RDB[(registry-db :5435)]
 
-    KONG -->|validate JWT signature<br/>via pinned realm key<br/>rate-limit, route| V[vitals_trends :8001]
-    KONG --> L[labs_diagnoses :8002]
-    KONG --> M[medications_interactions :8003]
-    KONG --> N[clinical_notes_search :8004]
+    AG -->|DISCOVERY_VIA=kong| KONG[kong :8000]
+    AG -.DISCOVERY_VIA=direct.-> V
+
+    KONG --> V[vitals :8001]
+    KONG --> L[labs :8002]
+    KONG --> M[meds :8003]
+    KONG --> N[notes :8004]
+    KONG -.onboarded domain.-> R[radiology :8005]
 
     V --> TS[(timescaledb :5433)]
     L --> PG[(postgres :5434)]
     M --> PG
     N --> QD[(qdrant :6333)]
+    R --> PG
 
-    AG -->|register / health| RA[registry-api :8600] --> RDB[(registry-db :5435)]
     KONG -.OTel.-> J[jaeger :16686]
+```
+
+## Build-time path (onboarding → runtime bridge)
+
+```mermaid
+flowchart LR
+    OA[onboarding_agent<br/>discover · suggest · RBAC] --> BP[blueprint.yaml]
+    BP --> GEN[generate.py] --> SRV[servers/domain/]
+    BP --> REG[register.py] --> RA[registry-api]
+    RA --> RDB[(registry-db)]
+    SRV -->|host-run| MCP[:8001–8005]
+    REG -.Kong route manual.-> KONG[kong.yml]
+    RA -->|GET /servers| AG[runtime agent]
 ```
 
 **Two security layers:** Kong is **Layer 1** (is the token *valid*? not over quota? route it).

@@ -13,6 +13,32 @@ Sync first or you'll build against stale state. Companion docs: [`HANDOVER_PERSO
 
 Tick these top-to-bottom. Items marked **⚠ action** need you to actually do something.
 
+```mermaid
+flowchart LR
+    subgraph SYNC["Do first — sync checklist"]
+        P0[clone + pull]
+        P1[Synthea v4.0.0 jar]
+        P2[Qdrant notes]
+        P3[Keycloak static key]
+        P4[verify token → Kong → :8001–8004]
+        P0 --> P1 --> P2 --> P3 --> P4
+    end
+
+    subgraph BUILD["Then build — Person B"]
+        B1[Keycloak scp + groups]
+        B2[Kong upstreams]
+        B3[runtime agent :8500]
+        B4[frontend :3000]
+        P4 --> B1 --> B2 --> B3 --> B4
+    end
+
+    subgraph FACTORY["Onboarding bridge — already wired"]
+        OA[onboarding CLI] --> GEN[generate.py] --> REG[register.py]
+        REG --> RA[registry-api]
+        RA --> AG[runtime agent<br/>REGISTRY_DISCOVERY]
+    end
+```
+
 ## 0. Clone / pull Person A delivery
 ```bash
 git clone https://github.com/aakash-p-s/MCP-Data-Factory.git
