@@ -1,0 +1,5 @@
+mcp>=1.27,<2
+fastapi==0.136.*
+uvicorn[standard]
+pyjwt
+asyncpg

@@ -37,6 +37,7 @@ KNOWN_DOMAINS = (
     "labs_diagnoses",
     "medications_interactions",
     "clinical_notes_search",
+    "radiology_reports",   # new domain onboarded via the factory (demo)
 )
 
 

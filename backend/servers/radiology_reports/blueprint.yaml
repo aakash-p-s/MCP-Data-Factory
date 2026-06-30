@@ -1,0 +1,20 @@
+domain: radiology_reports
+storage: postgres
+fhir_resource: DiagnosticReport
+scope: mcp.radiology.read
+kong_route: /mcp/clinical/radiology-reports/dev
+mcp_endpoint: /mcp
+status: draft
+tools:
+- name: get_radiology_report_trend
+  signature: '(patient_id: str) -> list[DiagnosticReport]'
+- name: get_latest_radiology_report
+  signature: '(patient_id: str) -> DiagnosticReport'
+- name: search_radiology_reports_by_modality
+  signature: '(patient_id: str, modality: str) -> list[DiagnosticReport]'
+rbac:
+  clinical-viewer: limited
+  physician: allow
+  case-manager: deny
+denial_envelope: '{"error":{"code":"forbidden","reason":"missing scope mcp.radiology.read"}}'
+terminology: LOINC
