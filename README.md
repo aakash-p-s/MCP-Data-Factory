@@ -12,6 +12,7 @@ FHIR R4 patient data ([Synthea](https://github.com/synthetichealth/synthea)) —
 
 **Docs index** (all in [`docs/`](docs/)): [`IMPLEMENTATION.md`](docs/IMPLEMENTATION.md) (setup, any OS) ·
 [`MCP_SERVERS.md`](docs/MCP_SERVERS.md) (how each server is built) ·
+[`ONBOARDING_AGENT.md`](docs/ONBOARDING_AGENT.md) (Person B: build-time agent guide) ·
 [`INFRASTRUCTURE.md`](docs/INFRASTRUCTURE.md) (Kong, Keycloak, databases) ·
 [`DATA_CHECKING.md`](docs/DATA_CHECKING.md) (browse SQL + Qdrant in the browser) ·
 [`backend/README.md`](backend/README.md) (backend detail) ·
