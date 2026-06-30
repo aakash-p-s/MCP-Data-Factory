@@ -169,7 +169,7 @@
       ],
       "attributes": {
         "mcp_scopes": [
-          "mcp.vitals.read mcp.labs.read mcp.meds.read mcp.notes.read"
+          "mcp.vitals.read mcp.labs.read mcp.meds.read mcp.notes.read mcp.radiology.read"
         ]
       }
     },
