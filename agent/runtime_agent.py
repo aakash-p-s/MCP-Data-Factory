@@ -54,6 +54,69 @@ NOTES_URL = os.environ.get(
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "")
 
 # ---------------------------------------------------------------------------
+# Registry-driven discovery (opt-in) — the onboarding→runtime bridge.
+# When REGISTRY_DISCOVERY=true the agent reads its server list from registry-api
+# (GET /servers) instead of the static URLs above, so a newly onboarded+registered
+# domain appears automatically. Uses the agent's OWN Keycloak service identity for
+# the registry (an infra call), distinct from the user token forwarded to the servers.
+# Falls back to the static URLs on any registry error.
+# ---------------------------------------------------------------------------
+REGISTRY_DISCOVERY = os.environ.get("REGISTRY_DISCOVERY", "false").lower() in ("1", "true", "yes")
+REGISTRY_URL = os.environ.get("REGISTRY_URL", "http://localhost:8600")
+DISCOVERY_VIA = os.environ.get("DISCOVERY_VIA", "direct")   # "direct" (port) or "kong"
+KONG_BASE = os.environ.get("KONG_BASE", "http://localhost:8000")
+KEYCLOAK_ISSUER = os.environ.get("KEYCLOAK_ISSUER", "http://localhost:8080/realms/patient-risk")
+KEYCLOAK_CLIENT_ID = os.environ.get("KEYCLOAK_CLIENT_ID", "patient-risk-agent")
+KEYCLOAK_CLIENT_SECRET = os.environ.get("KEYCLOAK_CLIENT_SECRET", "agent-secret-change-in-prod")
+
+_STATIC_URLS = {
+    "vitals_trends": VITALS_URL,
+    "labs_diagnoses": LABS_URL,
+    "medications_interactions": MEDS_URL,
+    "clinical_notes_search": NOTES_URL,
+}
+
+
+def _registry_service_token() -> str:
+    import httpx
+    r = httpx.post(f"{KEYCLOAK_ISSUER}/protocol/openid-connect/token",
+                   data={"grant_type": "client_credentials",
+                         "client_id": KEYCLOAK_CLIENT_ID, "client_secret": KEYCLOAK_CLIENT_SECRET},
+                   timeout=10)
+    r.raise_for_status()
+    return r.json()["access_token"]
+
+
+def resolve_server_urls() -> dict[str, str]:
+    """{domain: mcp_url}. From registry-api when REGISTRY_DISCOVERY, else static env."""
+    if not REGISTRY_DISCOVERY:
+        return dict(_STATIC_URLS)
+    try:
+        import httpx
+        token = _registry_service_token()
+        r = httpx.get(f"{REGISTRY_URL}/servers",
+                      headers={"Authorization": f"Bearer {token}"}, timeout=5)
+        r.raise_for_status()
+        urls: dict[str, str] = {}
+        for s in r.json():
+            domain = s.get("domain")
+            if not domain:
+                continue
+            if DISCOVERY_VIA == "kong" and s.get("kong_route"):
+                urls[domain] = f"{KONG_BASE}{s['kong_route']}"
+            elif s.get("port"):
+                urls[domain] = f"http://localhost:{s['port']}/mcp"
+        if urls:
+            logging.getLogger("runtime-agent").info(
+                "registry discovery: %d servers %s", len(urls), sorted(urls))
+            return urls
+    except Exception as exc:
+        logging.getLogger("runtime-agent").warning(
+            "registry discovery failed (%s) — falling back to static URLs", exc)
+    return dict(_STATIC_URLS)
+
+
+# ---------------------------------------------------------------------------
 # Demo patient alias resolution (PRD: agent layer resolves aliases → UUIDs)
 # ---------------------------------------------------------------------------
 _ALIASES_PATH = Path(__file__).resolve().parent.parent / \
@@ -136,39 +199,18 @@ def _build_server_config(token: str, groups: list[str] | None = None) -> dict:
     is_case_manager    = "grp-case-manager" in (groups or [])
     is_clinical_viewer = "grp-clinical-viewer" in (groups or [])
 
+    # URL source: registry-api discovery (opt-in) or static env — same RBAC filtering either way
+    urls = resolve_server_urls()
     servers = {}
 
-    # vitals — physician + clinical-viewer
-    if is_physician or is_clinical_viewer:
-        servers["vitals_trends"] = {
-            "url": VITALS_URL,
-            "transport": "streamable_http",
-            "headers": headers,
-        }
+    def _add(domain: str, allowed: bool) -> None:
+        if allowed and urls.get(domain):
+            servers[domain] = {"url": urls[domain], "transport": "streamable_http", "headers": headers}
 
-    # labs — physician + clinical-viewer
-    if is_physician or is_clinical_viewer:
-        servers["labs_diagnoses"] = {
-            "url": LABS_URL,
-            "transport": "streamable_http",
-            "headers": headers,
-        }
-
-    # medications — physician only
-    if is_physician:
-        servers["medications_interactions"] = {
-            "url": MEDS_URL,
-            "transport": "streamable_http",
-            "headers": headers,
-        }
-
-    # notes — physician + case-manager
-    if is_physician or is_case_manager:
-        servers["clinical_notes_search"] = {
-            "url": NOTES_URL,
-            "transport": "streamable_http",
-            "headers": headers,
-        }
+    _add("vitals_trends", is_physician or is_clinical_viewer)
+    _add("labs_diagnoses", is_physician or is_clinical_viewer)
+    _add("medications_interactions", is_physician)
+    _add("clinical_notes_search", is_physician or is_case_manager)
 
     # fallback — if no groups matched, connect to all (anonymous/POC)
     if not servers:
