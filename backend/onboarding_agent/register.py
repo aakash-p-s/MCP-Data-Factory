@@ -70,12 +70,47 @@ def register_blueprint(blueprint_path: str | Path, token: str | None = None) -> 
     return r.json()
 
 
+def health_sweep() -> None:
+    """Ping each registered server's /health and record a row in health_checks."""
+    import time
+
+    import psycopg
+
+    db_url = os.environ.get("REGISTRY_DB_URL")
+    if not db_url:
+        sys.exit("REGISTRY_DB_URL required for the health sweep")
+    token = service_token()
+    servers = httpx.get(f"{REGISTRY_URL}/servers",
+                        headers={"Authorization": f"Bearer {token}"}, timeout=10).json()
+    db = psycopg.connect(db_url, autocommit=True)
+    print(f"[health] sweeping {len(servers)} servers")
+    for s in servers:
+        port = s.get("port")
+        if not port:
+            continue
+        t = time.perf_counter()
+        status, err = "healthy", None
+        try:
+            r = httpx.get(f"http://localhost:{port}/health", timeout=3)
+            if r.status_code != 200:
+                status, err = "unhealthy", f"HTTP {r.status_code}"
+        except Exception as exc:
+            status, err = "unhealthy", str(exc)[:120]   # status CHECK allows only healthy/unhealthy
+        latency = int((time.perf_counter() - t) * 1000)
+        db.execute("INSERT INTO health_checks (server_id, status, latency_ms, error_msg) "
+                   "VALUES (%s, %s, %s, %s)", (s["server_id"], status, latency, err))
+        print(f"  {s['domain']:26} {status:9} {latency}ms")
+
+
 def _all_blueprints() -> list[Path]:
     return sorted(REPO_ROOT.glob("backend/servers/*/blueprint.yaml"))
 
 
 def main() -> None:
     args = sys.argv[1:]
+    if args and args[0] == "--health":
+        health_sweep()
+        return
     token = service_token()
     paths = _all_blueprints() if (not args or args[0] == "--all") else [Path(args[0])]
     print(f"[register] registry={REGISTRY_URL} | {len(paths)} blueprint(s)")

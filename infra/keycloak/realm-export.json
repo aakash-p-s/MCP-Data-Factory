@@ -91,6 +91,16 @@
             "userinfo.token.claim": "false",
             "multivalued": "false"
           }
+        },
+        {
+          "name": "audience-mapper",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "config": {
+            "included.custom.audience": "patient-risk",
+            "access.token.claim": "true",
+            "id.token.claim": "false"
+          }
         }
       ]
     }
