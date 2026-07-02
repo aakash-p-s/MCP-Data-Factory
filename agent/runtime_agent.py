@@ -27,6 +27,7 @@ from dotenv import load_dotenv
 load_dotenv(override=False)
 
 from fastapi import FastAPI, Header, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 import sys
@@ -207,6 +208,14 @@ app = FastAPI(
     ),
 )
 
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000"],
+    allow_credentials=True,
+    allow_methods=["GET", "POST", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type"],
+)
+
 
 def _build_server_config(token: str, groups: list[str] | None = None) -> dict:
     """
@@ -312,19 +321,24 @@ async def _run_agent(
             openai_api_key=OPENAI_API_KEY,
         )
 
-        client = MultiServerMCPClient(server_config)
+        # Connect to each server individually — skip any that fail so one
+        # unreachable server never silences the rest.
+        tools: list = []
+        servers_called = []
+        for domain, cfg in server_config.items():
+            try:
+                single_client = MultiServerMCPClient({domain: cfg})
+                domain_tools = await single_client.get_tools()
+                tools.extend(domain_tools)
+                servers_called.append(domain)
+            except Exception as e:
+                logger.warning("Skipping %s — could not get tools: %s", domain, e)
 
-        try:
-            tools = await client.get_tools()
-        except BaseException as e:
-            logger.warning("Failed to get tools from some servers: %s", e)
+        if not tools:
             return (
-                "Partial answer only — some servers were not accessible for this role "
-                "(access denied). Use a physician token for full access.",
-                list(server_config.keys()),
+                "No MCP servers responded. Check that all servers are running on :8001–8005.",
+                [],
             )
-
-        servers_called = list(server_config.keys())
 
         agent = create_react_agent(
             llm,
@@ -332,23 +346,13 @@ async def _run_agent(
             state_modifier=SYNTHESIS_PROMPT,
         )
 
-        try:
-            result = await agent.ainvoke(
-                {"messages": [("human", full_question)]},
-            )
-            messages = result.get("messages", [])
-            if messages:
-                return messages[-1].content, servers_called
-            return "No answer could be synthesized.", servers_called
-
-        except BaseException as inner_exc:
-            error_str = str(inner_exc)
-            logger.warning("Agent inner error (likely 403): %s", error_str)
-            return (
-                "Partial answer only — some servers were not accessible for this role "
-                "(access denied). Use a physician token for full access.",
-                servers_called,
-            )
+        result = await agent.ainvoke(
+            {"messages": [("human", full_question)]},
+        )
+        messages = result.get("messages", [])
+        if messages:
+            return messages[-1].content, servers_called
+        return "No answer could be synthesized.", servers_called
 
     except BaseException as exc:
         logger.error("Agent error: %s", exc, exc_info=True)
