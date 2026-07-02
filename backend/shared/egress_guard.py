@@ -18,11 +18,7 @@ _SQL_BACKENDS = {
     "vitals_trends": ("VITALS_DB_URL", "postgresql://postgres:changeme@localhost:5433/vitals"),
     "labs_diagnoses": ("CLINICAL_DB_URL", "postgresql://postgres:changeme@localhost:5434/clinical"),
     "medications_interactions": ("CLINICAL_DB_URL", "postgresql://postgres:changeme@localhost:5434/clinical"),
-<<<<<<< HEAD
-    "radiology_reports": ("CLINICAL_DB_URL", "postgresql://postgres:changeme@localhost:5434/clinical"), #<--ADDED FOR TESTING THE ONBOARDING AGENT
-=======
     "radiology_reports": ("CLINICAL_DB_URL", "postgresql://postgres:changeme@localhost:5434/clinical"),  # onboarding-agent demo domain
->>>>>>> 1caa326 (feat: pull onboarding agent (build-time) onto clean branch + verify against data layer)
 }
 
 _VECTOR_BACKENDS = {

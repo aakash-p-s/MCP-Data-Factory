@@ -188,23 +188,29 @@ function AccessOverview({ events }: { events: AuditEvent[] }) {
 export default function DashboardPage() {
   const { data: session, status } = useSession();
 
-  const fetcher = async (url: string) => {
-    const res = await fetch(url, {
-      headers: { Authorization: `Bearer ${session?.accessToken}` },
-    });
-    if (!res.ok) return [];
-    return res.json();
-  };
+  const token = session?.accessToken || "";
 
-  const { data: servers = [] } = useSWR<MCPServer[]>(
-    session?.accessToken ? `${REGISTRY_URL}/servers` : null,
-    fetcher,
+  const { data: servers = [], isLoading: serversLoading } = useSWR<MCPServer[]>(
+    token ? [`${REGISTRY_URL}/servers`, token] : null,
+    async ([url, tok]: [string, string]) => {
+      const res = await fetch(url, {
+        headers: { Authorization: `Bearer ${tok}` },
+      });
+      if (!res.ok) throw new Error(`${res.status}`);
+      return res.json();
+    },
     { refreshInterval: 5000 }
   );
 
   const { data: audit = [] } = useSWR<AuditEvent[]>(
-    session?.accessToken ? `${REGISTRY_URL}/audit?limit=500` : null,
-    fetcher,
+    token ? [`${REGISTRY_URL}/audit?limit=500`, token] : null,
+    async ([url, tok]: [string, string]) => {
+      const res = await fetch(url, {
+        headers: { Authorization: `Bearer ${tok}` },
+      });
+      if (!res.ok) return [];
+      return res.json();
+    },
     { refreshInterval: 30000 }
   );
 
@@ -226,7 +232,6 @@ export default function DashboardPage() {
     );
   }
 
-  const token = session.accessToken || "";
   const now = Date.now();
   const last24h = audit.filter((e) => new Date(e.when).getTime() > now - 86400000);
   const phiTouches = last24h.length;

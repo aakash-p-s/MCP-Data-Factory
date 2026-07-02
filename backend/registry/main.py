@@ -11,6 +11,7 @@ PRD reference: Section 5.6
 import os
 from datetime import datetime, timezone
 from fastapi import FastAPI, Depends, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy import select, delete
@@ -27,6 +28,14 @@ app = FastAPI(
     title="Patient Risk Intelligence — Registry API",
     version="1.0.0",
     description="Control-plane source of truth. All endpoints require a valid Keycloak token."
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000"],
+    allow_credentials=True,
+    allow_methods=["GET", "POST", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type"],
 )
 
 
