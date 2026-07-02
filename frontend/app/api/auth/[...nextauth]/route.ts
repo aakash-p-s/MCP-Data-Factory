@@ -51,6 +51,7 @@ export const authOptions: NextAuthOptions = {
     async session({ session, token }) {
       // Expose the access token and groups in the session object
       session.accessToken = token.accessToken as string;
+      session.idToken = token.idToken as string;
       session.groups = (token.groups as string[]) || [];
       session.user = {
         ...session.user,
@@ -58,6 +59,22 @@ export const authOptions: NextAuthOptions = {
         id: token.sub as string,
       };
       return session;
+    },
+  },
+  events: {
+    async signOut({ token }: { token: Record<string, unknown> }) {
+      // End the Keycloak SSO session so the login form shows on next sign-in
+      const idToken = token.idToken as string | undefined;
+      if (idToken && process.env.KEYCLOAK_ISSUER) {
+        const params = new URLSearchParams({
+          id_token_hint: idToken,
+          post_logout_redirect_uri: process.env.NEXTAUTH_URL || "http://localhost:3000",
+        });
+        await fetch(
+          `${process.env.KEYCLOAK_ISSUER}/protocol/openid-connect/logout?${params}`,
+          { method: "GET" }
+        ).catch(() => {});
+      }
     },
   },
   pages: {

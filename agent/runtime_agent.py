@@ -24,7 +24,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 # override=False so real env (Docker Compose / shell) wins over the .env file —
 # lets the deployment environment pick the right URLs without hand-editing .env.
-load_dotenv(override=False)
+load_dotenv(override=True)
 
 from fastapi import FastAPI, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware

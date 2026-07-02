@@ -42,13 +42,12 @@ interface AskResponse {
   trace_id?: string;
 }
 
-const AGENT_URL = process.env.NEXT_PUBLIC_AGENT_URL || "http://localhost:8500";
 
 function SystemStatusBadge() {
   const [status, setStatus] = useState<"checking" | "ok" | "error">("checking");
 
   useEffect(() => {
-    fetch(`${AGENT_URL}/health`)
+    fetch("/api/agent/health")
       .then((r) => setStatus(r.ok ? "ok" : "error"))
       .catch(() => setStatus("error"));
   }, []);
@@ -150,10 +149,9 @@ export default function ChatPage() {
 
     try {
       const t0 = Date.now();
-      const res = await fetch(`${AGENT_URL}/ask`, {
+      const res = await fetch("/api/agent/ask", {
         method: "POST",
         headers: {
-          Authorization: `Bearer ${session.accessToken}`,
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
@@ -166,7 +164,16 @@ export default function ChatPage() {
       const elapsed = Date.now() - t0;
 
       if (res.status === 401) {
-        signIn("keycloak");
+        setMessages((prev) =>
+          prev
+            .filter((m) => !m.isLoading)
+            .concat({
+              id: Date.now().toString(),
+              role: "assistant",
+              content: "Session expired. Please sign out and sign back in.",
+              timestamp: new Date(),
+            })
+        );
         return;
       }
       if (res.status === 422) {
