@@ -57,3 +57,15 @@ Thumbs.db
 # Onboarding agent generated blueprints (keep the dir, not the output)
 backend/onboarding_agent/output/*
 !backend/onboarding_agent/output/.gitkeep
+
+# frontend
+frontend/node_modules/
+frontend/.next/
+frontend/.env.local
+frontend/.env*.local
+frontend/out/
+frontend/build/
+frontend/.turbo/
+frontend/coverage/
+frontend/*.tsbuildinfo
+frontend/next-env.d.ts
