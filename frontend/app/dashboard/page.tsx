@@ -34,7 +34,7 @@ interface MCPServer {
   status: string;
 }
 
-const REGISTRY_URL = process.env.NEXT_PUBLIC_REGISTRY_URL || "http://localhost:8600";
+const REGISTRY_API = "/api/registry";
 const JAEGER_URL = process.env.NEXT_PUBLIC_JAEGER_URL || "http://localhost:16686";
 
 const PURPOSE_COLORS: Record<string, string> = {
@@ -188,27 +188,21 @@ function AccessOverview({ events }: { events: AuditEvent[] }) {
 export default function DashboardPage() {
   const { data: session, status } = useSession();
 
-  const token = session?.accessToken || "";
-
-  const { data: servers = [], isLoading: serversLoading } = useSWR<MCPServer[]>(
-    token ? [`${REGISTRY_URL}/servers`, token] : null,
-    async ([url, tok]: [string, string]) => {
-      const res = await fetch(url, {
-        headers: { Authorization: `Bearer ${tok}` },
-      });
-      if (!res.ok) throw new Error(`${res.status}`);
+  const { data: servers = [], error: serversError } = useSWR<MCPServer[]>(
+    status === "authenticated" ? `${REGISTRY_API}/servers` : null,
+    async (url: string) => {
+      const res = await fetch(url);
+      if (!res.ok) throw new Error(`Registry servers: ${res.status}`);
       return res.json();
     },
     { refreshInterval: 5000 }
   );
 
-  const { data: audit = [] } = useSWR<AuditEvent[]>(
-    token ? [`${REGISTRY_URL}/audit?limit=500`, token] : null,
-    async ([url, tok]: [string, string]) => {
-      const res = await fetch(url, {
-        headers: { Authorization: `Bearer ${tok}` },
-      });
-      if (!res.ok) return [];
+  const { data: audit = [], error: auditError } = useSWR<AuditEvent[]>(
+    status === "authenticated" ? `${REGISTRY_API}/audit?limit=500` : null,
+    async (url: string) => {
+      const res = await fetch(url);
+      if (!res.ok) throw new Error(`Registry audit: ${res.status}`);
       return res.json();
     },
     { refreshInterval: 30000 }
@@ -225,6 +219,17 @@ export default function DashboardPage() {
   if (!session) {
     return (
       <div className="min-h-screen bg-[#0A0F1E] flex items-center justify-center">
+        <button onClick={() => signIn("keycloak")} className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm">
+          Sign in
+        </button>
+      </div>
+    );
+  }
+
+  if (session.error === "RefreshAccessTokenError") {
+    return (
+      <div className="min-h-screen bg-[#0A0F1E] flex flex-col items-center justify-center gap-3">
+        <p className="text-sm text-gray-400">Session expired — sign in again to load dashboard metrics.</p>
         <button onClick={() => signIn("keycloak")} className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm">
           Sign in
         </button>
@@ -254,6 +259,14 @@ export default function DashboardPage() {
         </div>
 
         {/* KPI cards */}
+        {(auditError || serversError) && (
+          <div className="mb-4 px-4 py-3 rounded-lg border border-amber-500/30 bg-amber-500/10 text-sm text-amber-300">
+            Could not load registry metrics
+            {auditError ? ` (audit: ${auditError.message})` : ""}
+            {serversError ? ` (servers: ${serversError.message})` : ""}
+            . Sign out and sign back in if this persists.
+          </div>
+        )}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
           <KpiCard
             title="Total PHI Touches"
@@ -292,7 +305,7 @@ export default function DashboardPage() {
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-base font-semibold text-white">Registered MCP Servers</h2>
           </div>
-          <RegistryTable token={token} />
+          <RegistryTable />
         </div>
 
         {/* Charts row */}
@@ -303,7 +316,7 @@ export default function DashboardPage() {
 
         {/* Anomaly panel */}
         <div className="bg-[#0D1120] border border-[#1F2937] rounded-xl p-5">
-          <AnomalyPanel token={token} />
+          <AnomalyPanel events={audit} />
         </div>
       </div>
     </div>

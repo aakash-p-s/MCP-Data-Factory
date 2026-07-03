@@ -74,13 +74,37 @@ def configure(service_name: str) -> None:
     _tracer = trace.get_tracer(service_name)
 
 
+def _parent_context(trace_id: str | None):
+    """Build a remote parent Context whose trace-id is our W3C trace_id, so the
+    span this wraps gets the SAME trace ID Jaeger shows — otherwise the SDK mints
+    its own random trace id and audit.trace_id never resolves via GET /trace/{id}."""
+    if not trace_id:
+        return None
+    try:
+        from opentelemetry.trace import (NonRecordingSpan, SpanContext, TraceFlags,
+                                          set_span_in_context)
+        trace_id_int = int(trace_id, 16)
+        if trace_id_int == 0:
+            return None
+        # span_id just needs to be a valid non-zero 64-bit id for a remote parent —
+        # it is not otherwise meaningful since we never see the caller's real span.
+        span_id_int = (trace_id_int & 0xFFFFFFFFFFFFFFFF) or 1
+        parent = SpanContext(
+            trace_id=trace_id_int, span_id=span_id_int,
+            is_remote=True, trace_flags=TraceFlags(TraceFlags.SAMPLED),
+        )
+        return set_span_in_context(NonRecordingSpan(parent))
+    except (ValueError, ImportError):
+        return None
+
+
 @contextmanager
 def span(name: str, trace_id: str | None = None, **attributes) -> Iterator[None]:
     """Open a span for the current operation. No-op when OTel isn't configured."""
     if _tracer is None:
         yield
         return
-    with _tracer.start_as_current_span(name) as sp:
+    with _tracer.start_as_current_span(name, context=_parent_context(trace_id)) as sp:
         if trace_id:
             sp.set_attribute("app.trace_id", trace_id)
         for key, value in attributes.items():

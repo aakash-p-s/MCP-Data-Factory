@@ -152,6 +152,10 @@ services:
       DATABASE_URL: postgresql+asyncpg://registry_user:registry_pass@registry-db:5432/registry
       KEYCLOAK_JWKS_URL: http://keycloak:8080/realms/patient-risk/protocol/openid-connect/certs
       KEYCLOAK_AUDIENCE: patient-risk
+      # Live health sweep — keeps the dashboard's Status badge truthful instead of the
+      # write-once value set at registration time (see backend/registry/main.py).
+      HEALTH_CHECK_INTERVAL_SECONDS: "20"
+      MCP_SERVER_HOST: host.docker.internal
     ports:
       - "8600:8600"
     depends_on:

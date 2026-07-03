@@ -2,21 +2,17 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { NextResponse } from "next/server";
 
-const AGENT_URL = process.env.NEXT_PUBLIC_AGENT_URL || "http://localhost:8500";
+const REGISTRY_URL = process.env.NEXT_PUBLIC_REGISTRY_URL || "http://localhost:8600";
 
-export async function POST(request: Request) {
+export async function GET(request: Request) {
   const session = await getServerSession(authOptions);
   if (!session?.accessToken) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  const body = await request.json();
-  const res = await fetch(`${AGENT_URL}/ask`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${session.accessToken}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(body),
+  const { searchParams } = new URL(request.url);
+  const limit = searchParams.get("limit") || "500";
+  const res = await fetch(`${REGISTRY_URL}/audit?limit=${limit}`, {
+    headers: { Authorization: `Bearer ${session.accessToken}` },
   });
   const data = await res.json();
   return NextResponse.json(data, { status: res.status });

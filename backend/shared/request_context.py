@@ -14,13 +14,15 @@ class RequestContext:
     claims: dict | None
     purpose_of_access: str
     trace_id: str | None
+    service: str | None = None
 
 
 _ctx: ContextVar[RequestContext | None] = ContextVar("fixed_core_request", default=None)
 
 
-def set_context(claims: dict | None, purpose_of_access: str, trace_id: str | None) -> None:
-    _ctx.set(RequestContext(claims, purpose_of_access, trace_id))
+def set_context(claims: dict | None, purpose_of_access: str, trace_id: str | None,
+                 service: str | None = None) -> None:
+    _ctx.set(RequestContext(claims, purpose_of_access, trace_id, service))
 
 
 def clear_context() -> None:

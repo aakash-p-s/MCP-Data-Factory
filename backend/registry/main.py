@@ -8,8 +8,13 @@ All endpoints require a valid Keycloak token (non-anonymous).
 PRD reference: Section 5.6
 """
 
+import asyncio
+import logging
 import os
+import time
 from datetime import datetime, timezone
+
+import httpx
 from fastapi import FastAPI, Depends, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
@@ -20,6 +25,16 @@ from auth import require_valid_token
 from models import Base, MCPServer, HealthCheck, AuditEvent, ToolSpec, RBACMapping
 
 DATABASE_URL = os.environ["DATABASE_URL"]
+
+# Live health-check sweep — replaces the old manual-only `register.py --health`. Without
+# this, mcp_servers.status is a write-once value set at registration time and never reflects
+# reality again; a server that dies afterward still shows "healthy" forever. MCP servers run
+# on the HOST (see docker-compose.yml comment), so from inside this container we reach them
+# via host.docker.internal, same convention Kong already uses (infra/kong/kong.yml).
+HEALTH_CHECK_INTERVAL_SECONDS = int(os.getenv("HEALTH_CHECK_INTERVAL_SECONDS", "20"))
+MCP_SERVER_HOST = os.getenv("MCP_SERVER_HOST", "host.docker.internal")
+
+logger = logging.getLogger("registry.health")
 
 engine = create_async_engine(DATABASE_URL, echo=False)
 AsyncSessionLocal = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
@@ -44,10 +59,54 @@ async def get_db():
         yield session
 
 
+async def _check_one(client: httpx.AsyncClient, port: int) -> tuple[str, int, str | None]:
+    """Ping one MCP server's /health. Returns (status, latency_ms, error_msg)."""
+    start = time.perf_counter()
+    try:
+        r = await client.get(f"http://{MCP_SERVER_HOST}:{port}/health", timeout=3)
+        latency_ms = int((time.perf_counter() - start) * 1000)
+        if r.status_code == 200:
+            return "healthy", latency_ms, None
+        return "unhealthy", latency_ms, f"HTTP {r.status_code}"
+    except Exception as exc:
+        latency_ms = int((time.perf_counter() - start) * 1000)
+        return "unhealthy", latency_ms, str(exc)[:200]
+
+
+async def _health_sweep_once() -> None:
+    async with AsyncSessionLocal() as db, httpx.AsyncClient() as client:
+        servers = (await db.execute(select(MCPServer))).scalars().all()
+        for s in servers:
+            if not s.port:
+                continue
+            status, latency_ms, error_msg = await _check_one(client, s.port)
+            s.status = status
+            s.updated_at = datetime.now(timezone.utc)
+            db.add(HealthCheck(server_id=s.server_id, status=status,
+                                latency_ms=latency_ms, error_msg=error_msg))
+        await db.commit()
+
+
+async def _health_check_loop() -> None:
+    """Background sweep — keeps mcp_servers.status (what the dashboard's colored badge
+    reads) truthful without anyone having to remember to run register.py --health."""
+    while True:
+        try:
+            await _health_sweep_once()
+        except Exception:
+            logger.exception("health sweep failed — will retry next interval")
+        await asyncio.sleep(HEALTH_CHECK_INTERVAL_SECONDS)
+
+
 @app.on_event("startup")
 async def create_tables():
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+
+
+@app.on_event("startup")
+async def start_health_sweep():
+    asyncio.create_task(_health_check_loop())
 
 
 @app.get("/servers", summary="List all registered MCP servers")
@@ -113,6 +172,30 @@ async def get_server_health(
     }
 
 
+@app.get("/servers/{server_id}/tools", summary="Cached tool schemas for a server")
+async def get_server_tools(
+    server_id: int,
+    claims: dict = Depends(require_valid_token),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Returns each tool's cached name/description/input_schema from tool_specs — populated
+    at registration time (see backend/onboarding_agent/register.py). Lets the runtime agent
+    build a callable tool for the LLM WITHOUT opening a live MCP connection to discover it;
+    a domain the LLM never decides to call is never connected to at all.
+    """
+    result = await db.execute(select(ToolSpec).where(ToolSpec.server_id == server_id))
+    tools = result.scalars().all()
+    return [
+        {
+            "name":         t.tool_name,
+            "description":  t.description,
+            "input_schema": t.input_schema,
+        }
+        for t in tools
+    ]
+
+
 @app.post("/servers", status_code=201, summary="Register or update an MCP server")
 async def register_server(
     payload: dict,
@@ -149,7 +232,9 @@ async def register_server(
     await db.flush()   # populate server.server_id
 
     # Optional: tools + per-role RBAC from the blueprint (the build pipeline passes these).
-    # Stored in tool_specs + rbac_mappings so GET /servers can return allowed_roles.
+    # Stored in tool_specs + rbac_mappings so GET /servers can return allowed_roles, and
+    # GET /servers/{id}/tools can return cached schemas the runtime agent builds tools from
+    # WITHOUT connecting to the live MCP server just to ask it (see agent/runtime_agent.py).
     tools = payload.get("tools") or []
     rbac = payload.get("rbac") or {}            # {role_name: "allow"|"deny"}
     scope = payload.get("scope")
@@ -160,8 +245,19 @@ async def register_server(
             await db.execute(delete(RBACMapping).where(RBACMapping.tool_id == ts.tool_id))
             await db.delete(ts)
         await db.flush()
-        for tname in tools:
-            ts = ToolSpec(server_id=server.server_id, tool_name=tname)
+        for t in tools:
+            # Accept both the legacy bare-name-string form and the richer dict form
+            # (name + input_schema + description) so older callers don't break.
+            if isinstance(t, str):
+                tname, input_schema, description = t, None, None
+            else:
+                tname = t.get("name")
+                input_schema = t.get("input_schema")
+                description = t.get("description")
+            if not tname:
+                continue
+            ts = ToolSpec(server_id=server.server_id, tool_name=tname,
+                          input_schema=input_schema, description=description)
             db.add(ts)
             await db.flush()
             for role, decision in rbac.items():

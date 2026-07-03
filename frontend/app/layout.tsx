@@ -95,7 +95,11 @@ function Nav() {
                 </p>
               </div>
               <button
-                onClick={() => signOut({ callbackUrl: "/" })}
+                onClick={async () => {
+                  const keycloakIssuer = process.env.NEXT_PUBLIC_KEYCLOAK_ISSUER || "http://localhost:8080/realms/patient-risk";
+                  await signOut({ redirect: false });
+                  window.location.href = `${keycloakIssuer}/protocol/openid-connect/logout?post_logout_redirect_uri=${encodeURIComponent("http://localhost:3000")}&client_id=patient-risk-agent`;
+                }}
                 className="w-full text-left px-3 py-2 text-sm text-red-400 hover:bg-red-500/10 transition-colors"
               >
                 Sign out

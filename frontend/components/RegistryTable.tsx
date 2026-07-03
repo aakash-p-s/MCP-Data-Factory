@@ -64,18 +64,15 @@ function HealthBar({ pct }: { pct: number }) {
   );
 }
 
-export function RegistryTable({ token }: { token: string }) {
-  const registryUrl = process.env.NEXT_PUBLIC_REGISTRY_URL || "http://localhost:8600";
+export function RegistryTable() {
   const [expandedId, setExpandedId] = useState<number | null>(null);
   const [healthDetails, setHealthDetails] = useState<Record<number, HealthDetail>>({});
   const [lastRefresh, setLastRefresh] = useState<Date>(new Date());
 
-  const { data: servers = [], isLoading, mutate } = useSWR<MCPServer[]>(
-    token ? `${registryUrl}/servers` : null,
+  const { data: servers = [], isLoading, mutate, error } = useSWR<MCPServer[]>(
+    "/api/registry/servers",
     async (url: string) => {
-      const res = await fetch(url, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const res = await fetch(url);
       if (!res.ok) throw new Error(`${res.status}`);
       setLastRefresh(new Date());
       return res.json();
@@ -91,9 +88,7 @@ export function RegistryTable({ token }: { token: string }) {
     setExpandedId(server.server_id);
     if (!healthDetails[server.server_id]) {
       try {
-        const res = await fetch(`${registryUrl}/servers/${server.server_id}/health`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
+        const res = await fetch(`/api/registry/servers/${server.server_id}/health`);
         if (res.ok) {
           const data = await res.json();
           setHealthDetails((prev) => ({ ...prev, [server.server_id]: data }));
@@ -109,6 +104,14 @@ export function RegistryTable({ token }: { token: string }) {
           <div key={i} className="h-12 bg-[#111827] rounded-lg animate-pulse" />
         ))}
       </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <p className="text-sm text-amber-400">
+        Could not load server registry ({error.message}). Sign out and sign back in.
+      </p>
     );
   }
 

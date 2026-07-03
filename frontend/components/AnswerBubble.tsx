@@ -85,6 +85,7 @@ function renderAnswerWithCitations(text: string): React.ReactNode[] {
 interface AnswerBubbleProps {
   answer: string;
   serversCALLED: string[];
+  serversAvailable?: string[];
   patientId: string;
   purpose: string;
   traceId?: string;
@@ -94,13 +95,22 @@ interface AnswerBubbleProps {
 export function AnswerBubble({
   answer,
   serversCALLED,
+  serversAvailable,
   patientId,
   purpose,
   traceId,
   responseTimeMs,
 }: AnswerBubbleProps) {
   const jaegerUrl = process.env.NEXT_PUBLIC_JAEGER_URL || "http://localhost:16686";
-  const missedServers = ALL_SERVERS.filter((s) => !serversCALLED.includes(s));
+  // RBAC-inaccessible servers, NOT "servers this particular question didn't need" — those
+  // are different things. serversCALLED only reflects domains the agent actually invoked
+  // (it lazily connects only when a tool is used), so a narrow question from a fully
+  // privileged physician legitimately calls just 1 server — that must not be shown as a
+  // role restriction. serversAvailable (RBAC-permitted regardless of this question) is
+  // what "missed" should be measured against; fall back to serversCALLED only if an older
+  // agent response omitted the new field.
+  const roleAccessible = serversAvailable ?? serversCALLED;
+  const missedServers = ALL_SERVERS.filter((s) => !roleAccessible.includes(s));
 
   return (
     <div className="message-enter">
@@ -160,7 +170,7 @@ export function AnswerBubble({
         {/* Role-aware message */}
         {missedServers.length > 0 && (
           <p className="mt-2 text-xs text-amber-500/80">
-            ℹ You have access to {serversCALLED.length} of {ALL_SERVERS.length} servers.
+            ℹ You have access to {roleAccessible.length} of {ALL_SERVERS.length} servers.
             Physician role required for full access.
           </p>
         )}

@@ -1,7 +1,5 @@
 "use client";
 
-import useSWR from "swr";
-
 /**
  * components/AnomalyPanel.tsx
  *
@@ -158,21 +156,8 @@ function detectAnomalies(events: AuditEvent[]): Anomaly[] {
   return anomalies;
 }
 
-export function AnomalyPanel({ token }: { token: string }) {
-  const registryUrl = process.env.NEXT_PUBLIC_REGISTRY_URL || "http://localhost:8600";
+export function AnomalyPanel({ events }: { events: AuditEvent[] }) {
   const jaegerUrl = process.env.NEXT_PUBLIC_JAEGER_URL || "http://localhost:16686";
-
-  const { data: events = [], isLoading } = useSWR<AuditEvent[]>(
-    token ? `${registryUrl}/audit?limit=500` : null,
-    async (url: string) => {
-      const res = await fetch(url, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (!res.ok) return [];
-      return res.json();
-    },
-    { refreshInterval: 30000 }
-  );
 
   const anomalies = detectAnomalies(events);
 
@@ -192,15 +177,7 @@ export function AnomalyPanel({ token }: { token: string }) {
         </button>
       </div>
 
-      {isLoading && (
-        <div className="space-y-2">
-          {[...Array(3)].map((_, i) => (
-            <div key={i} className="h-12 bg-[#111827] rounded-lg animate-pulse" />
-          ))}
-        </div>
-      )}
-
-      {!isLoading && anomalies.length === 0 && (
+      {anomalies.length === 0 && (
         <div className="text-center py-8 text-gray-600 text-sm border border-[#1F2937] rounded-xl">
           <span className="text-2xl mb-2 block">✓</span>
           No anomalies detected

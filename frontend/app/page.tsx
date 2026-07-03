@@ -124,7 +124,10 @@ export default function HomePage() {
 
               {/* SSO Button — primary action */}
               <button
-                onClick={() => signIn("keycloak", { callbackUrl: "/chat" })}
+                onClick={() => signIn("keycloak", {
+                  callbackUrl: "/chat",
+                  prompt: "login",
+                })}
                 className="w-full h-11 bg-blue-600 hover:bg-blue-500 active:bg-blue-700 text-white font-medium text-sm rounded-lg flex items-center justify-center gap-2 transition-colors mb-4"
               >
                 <span>🔑</span>

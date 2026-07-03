@@ -26,6 +26,7 @@ interface Message {
   role: "user" | "assistant";
   content: string;
   serversCALLED?: string[];
+  serversAvailable?: string[];
   patientId?: string;
   purpose?: string;
   traceId?: string;
@@ -39,6 +40,7 @@ interface AskResponse {
   patient_uuid: string;
   purpose_of_access: string;
   servers_called: string[];
+  servers_available?: string[];
   trace_id?: string;
 }
 
@@ -127,7 +129,7 @@ export default function ChatPage() {
 
   async function handleSend() {
     const question = input.trim();
-    if (!question || loading) return;
+    if (!question || loading || !session?.accessToken) return;
 
     const userMsg: Message = {
       id: Date.now().toString(),
@@ -204,6 +206,7 @@ export default function ChatPage() {
             role: "assistant",
             content: data.answer,
             serversCALLED: data.servers_called,
+            serversAvailable: data.servers_available,
             patientId: data.patient_id,
             purpose: data.purpose_of_access,
             traceId: data.trace_id,
@@ -421,6 +424,7 @@ export default function ChatPage() {
                       <AnswerBubble
                         answer={msg.content}
                         serversCALLED={msg.serversCALLED}
+                        serversAvailable={msg.serversAvailable}
                         patientId={msg.patientId || patient}
                         purpose={msg.purpose || purpose}
                         traceId={msg.traceId}

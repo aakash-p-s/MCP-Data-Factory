@@ -35,7 +35,11 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 from prompts import SYNTHESIS_PROMPT
 
+from backend.shared import telemetry
+
 logger = logging.getLogger(__name__)
+
+telemetry.configure("runtime_agent")
 
 # ---------------------------------------------------------------------------
 # MCP server URLs. Default = DIRECT to each server on the host (works out of the box for
@@ -96,8 +100,9 @@ def _registry_service_token() -> str:
 
 
 def discover_servers() -> dict[str, dict]:
-    """{domain: {"url":..., "allowed_roles": set}}. From registry-api when
-    REGISTRY_DISCOVERY (URL + RBAC both live), else the static URLs + frozen matrix."""
+    """{domain: {"url":..., "allowed_roles": set, "server_id": int|None}}. From registry-api
+    when REGISTRY_DISCOVERY (URL + RBAC + server_id all live), else the static URLs + frozen
+    matrix (server_id is None here — no registry row to fetch cached tool schemas from)."""
     if REGISTRY_DISCOVERY:
         try:
             import httpx
@@ -116,7 +121,8 @@ def discover_servers() -> dict[str, dict]:
                     url = f"http://localhost:{s['port']}/mcp"
                 else:
                     continue
-                out[domain] = {"url": url, "allowed_roles": set(s.get("allowed_roles") or [])}
+                out[domain] = {"url": url, "allowed_roles": set(s.get("allowed_roles") or []),
+                                "server_id": s.get("server_id")}
             if out:
                 logging.getLogger("runtime-agent").info(
                     "registry discovery: %d servers %s", len(out), sorted(out))
@@ -124,8 +130,19 @@ def discover_servers() -> dict[str, dict]:
         except Exception as exc:
             logging.getLogger("runtime-agent").warning(
                 "registry discovery failed (%s) — falling back to static", exc)
-    return {d: {"url": u, "allowed_roles": set(_STATIC_RBAC.get(d, set()))}
+    return {d: {"url": u, "allowed_roles": set(_STATIC_RBAC.get(d, set())), "server_id": None}
             for d, u in _STATIC_URLS.items()}
+
+
+def fetch_cached_tools(server_id: int, token: str) -> list[dict]:
+    """Cached tool schemas from registry-api (populated at registration time — see
+    backend/onboarding_agent/register.py). Lets the agent build a callable LangChain tool
+    WITHOUT opening a live MCP connection just to ask a server what it can do."""
+    import httpx
+    r = httpx.get(f"{REGISTRY_URL}/servers/{server_id}/tools",
+                  headers={"Authorization": f"Bearer {token}"}, timeout=5)
+    r.raise_for_status()
+    return r.json()
 
 
 def resolve_server_urls() -> dict[str, str]:
@@ -193,6 +210,11 @@ class AskResponse(BaseModel):
     patient_uuid: str
     purpose_of_access: str
     servers_called: list[str]
+    # RBAC-permitted domains for this caller's role, regardless of whether THIS specific
+    # question needed them. Distinct from servers_called (which only reflects lazy-connected,
+    # actually-used domains) — the frontend needs this to correctly tell "not relevant to
+    # this question" apart from "not accessible for your role" (see AnswerBubble.tsx).
+    servers_available: list[str] = []
 
 
 # ---------------------------------------------------------------------------
@@ -217,7 +239,8 @@ app.add_middleware(
 )
 
 
-def _build_server_config(token: str, groups: list[str] | None = None) -> dict:
+def _build_server_config(token: str, groups: list[str] | None = None,
+                          trace_id: str | None = None, purpose: str | None = None) -> dict:
     """
     Build MultiServerMCPClient config with Bearer token.
     Only include servers the role can actually access — prevents
@@ -228,24 +251,59 @@ def _build_server_config(token: str, groups: list[str] | None = None) -> dict:
         "Accept": "application/json, text/event-stream",
         "Content-Type": "application/json",
     }
+    if purpose:
+        # Without this, middleware.py's normalize_purpose(headers.get("x-purpose-of-access"))
+        # always falls back to the default "routine_review" — the clinician's actual selected
+        # purpose never reaches the audit trail, silently breaking the Purpose Mismatch
+        # anomaly heuristic and the dashboard's "Questions by Purpose" breakdown.
+        headers["X-Purpose-Of-Access"] = purpose
+    if trace_id:
+        # W3C traceparent — lets every MCP server this question touches share ONE
+        # trace_id in the audit trail, and (via telemetry.span's remote-parent context)
+        # the same real Jaeger trace id too.
+        headers["traceparent"] = f"00-{trace_id}-{trace_id[:16]}-01"
 
     # RBAC is now data-driven: discover_servers() yields each server's url + allowed_roles
     # (from registry-api when REGISTRY_DISCOVERY, else the frozen §6.3 matrix). A server is
     # included only if the caller's roles intersect its allowed_roles — so a newly
     # onboarded+registered domain is auto-callable for the roles its blueprint allows.
+    # "server_id" travels alongside the MultiServerMCPClient config (not a client field
+    # itself — strip it before passing the dict to MultiServerMCPClient) so the caller can
+    # fetch that domain's cached tool schemas without a second discover_servers() round trip.
     caller_groups = set(groups or [])
     servers = {}
     for domain, info in discover_servers().items():
         if info.get("url") and caller_groups & info.get("allowed_roles", set()):
-            servers[domain] = {"url": info["url"], "transport": "streamable_http", "headers": headers}
+            servers[domain] = {"url": info["url"], "transport": "streamable_http", "headers": headers,
+                                "server_id": info.get("server_id")}
 
     # fallback — no groups on the token (anonymous/POC service account): connect to all known
     if not servers and not caller_groups:
         for domain, info in discover_servers().items():
             if info.get("url"):
-                servers[domain] = {"url": info["url"], "transport": "streamable_http", "headers": headers}
+                servers[domain] = {"url": info["url"], "transport": "streamable_http", "headers": headers,
+                                    "server_id": info.get("server_id")}
 
     return servers
+
+
+def _available_domains_for_token(token: str) -> list[str]:
+    """Domains this caller's role can reach — independent of which of them a specific
+    question actually needed. Used for AskResponse.servers_available so the frontend can
+    tell "irrelevant to this question" apart from "not accessible for your role"."""
+    try:
+        import jwt as pyjwt
+        groups = pyjwt.decode(token, options={"verify_signature": False}).get("groups", [])
+    except Exception:
+        groups = []
+    caller_groups = set(groups)
+    available = []
+    for domain, info in discover_servers().items():
+        if not info.get("url"):
+            continue
+        if not caller_groups or caller_groups & info.get("allowed_roles", set()):
+            available.append(domain)
+    return sorted(available)
 
 
 def _rbac_excluded_domains(groups: list[str]) -> list[str]:
@@ -261,11 +319,69 @@ def _rbac_excluded_domains(groups: list[str]) -> list[str]:
     return sorted(excluded)
 
 
+# ---------------------------------------------------------------------------
+# Lazy per-tool MCP connection — build a callable LangChain tool from a cached
+# registry schema (see fetch_cached_tools) WITHOUT opening the MCP server's
+# connection. The connection only happens the moment the LLM actually invokes
+# that specific tool, and only for that one domain — a domain the LLM never
+# calls into is never touched at all (was previously connected to on every
+# single /ask, regardless of relevance — see runtime_agent recursion/waste bug).
+# ---------------------------------------------------------------------------
+
+_JSON_TO_PY = {"string": str, "integer": int, "number": float, "boolean": bool, "array": list}
+
+
+def _pydantic_model_from_schema(tool_name: str, schema: dict):
+    from pydantic import create_model
+
+    props = (schema or {}).get("properties", {})
+    required = set((schema or {}).get("required", []))
+    fields: dict = {}
+    for pname, pschema in props.items():
+        ptype = _JSON_TO_PY.get(pschema.get("type", "string"), str)
+        fields[pname] = (ptype, ...) if pname in required else (ptype, pschema.get("default"))
+    return create_model(f"{tool_name}_Args", **fields)
+
+
+def _build_lazy_tool(domain: str, mcp_cfg: dict, spec: dict,
+                      servers_called: list[str], domain_tools_cache: dict[str, list]):
+    """One LangChain StructuredTool per cached spec. Its coroutine opens the real MCP
+    connection for `domain` on first invocation only, then reuses it for any further
+    tool calls into the same domain within this request."""
+    from langchain_core.tools import StructuredTool
+
+    tool_name = spec["name"]
+    args_model = _pydantic_model_from_schema(tool_name, spec.get("input_schema"))
+
+    async def _call(**kwargs):
+        # Imported here, not at module level — _build_lazy_tool/_call are module-level
+        # functions, so they don't see _run_agent's local (optional-dependency) import.
+        from langchain_mcp_adapters.client import MultiServerMCPClient
+
+        if domain not in domain_tools_cache:
+            single_client = MultiServerMCPClient({domain: mcp_cfg})
+            domain_tools_cache[domain] = await single_client.get_tools()
+        match = next((t for t in domain_tools_cache[domain] if t.name == tool_name), None)
+        if match is None:
+            raise RuntimeError(f"{tool_name} not found on {domain} — server may be unreachable")
+        if domain not in servers_called:
+            servers_called.append(domain)
+        return await match.ainvoke(kwargs)
+
+    return StructuredTool(
+        name=tool_name,
+        description=spec.get("description") or tool_name,
+        args_schema=args_model,
+        coroutine=_call,
+    )
+
+
 async def _run_agent(
     question: str,
     patient_uuid: str,
     purpose: str,
     token: str,
+    trace_id: str | None = None,
 ) -> tuple[str, list[str]]:
     """
     Core agent logic — connects to all 4 MCP servers, calls tools, fuses answer.
@@ -274,14 +390,13 @@ async def _run_agent(
     try:
         from langchain_mcp_adapters.client import MultiServerMCPClient
         from langchain_openai import ChatOpenAI
+        from langgraph.errors import GraphRecursionError
         from langgraph.prebuilt import create_react_agent
     except ImportError as exc:
         raise RuntimeError(
             f"Agent dependencies not installed: {exc}. "
             "Run: pip install langchain-mcp-adapters langgraph langchain-openai"
         ) from exc
-
-    servers_called: list[str] = []
 
     # Decode token to extract groups for RBAC-aware server selection
     try:
@@ -291,7 +406,7 @@ async def _run_agent(
     except Exception:
         groups = []
 
-    server_config = _build_server_config(token, groups)
+    server_config = _build_server_config(token, groups, trace_id, purpose)
 
     if not server_config and groups:
         excluded = _rbac_excluded_domains(groups)
@@ -304,14 +419,33 @@ async def _run_agent(
             [],
         )
 
+    # Tell the LLM up front exactly which domains it can and cannot reach for THIS request.
+    # Without this, a restricted role asked about an excluded domain (e.g. a clinical-viewer
+    # asked about medications) has no tool for it but doesn't know that's expected — it keeps
+    # hunting with whatever tools it does have, which can spiral past the recursion limit.
+    available_domains = ", ".join(sorted(server_config.keys())) or "none"
+    excluded_domains = _rbac_excluded_domains(groups) if groups else []
+    excluded_note = (
+        f"Servers NOT accessible for this request (no tool exists for these — do not attempt "
+        f"other tools to compensate; just state '(access denied for this role)' once and move on): "
+        f"{', '.join(excluded_domains)}.\n\n"
+        if excluded_domains else ""
+    )
+
     full_question = (
         f"{question}\n\n"
         f"Patient ID (UUID): {patient_uuid}\n"
         f"Purpose of access: {purpose}\n\n"
+        f"Servers available to you for this request: {available_domains}.\n"
+        f"{excluded_note}"
         "IMPORTANT: Cite which server each fact came from in parentheses "
         "— e.g. (vitals_trends) or (medications_interactions). "
         "If a server denied access with 403, say so explicitly — do not retry. "
-        "Always produce a complete answer from whatever data is available."
+        "Always produce a complete answer from whatever data is available.\n\n"
+        "Tool discipline: for overall risk summaries, prefer compact tools "
+        "(compute_news2_score, get_active_diagnoses, get_active_medications, "
+        "get_polypharmacy_risk, get_latest_radiology_report, get_recent_notes with limit=3). "
+        "Avoid full history/trend tools unless the question asks for trends or history."
     )
 
     try:
@@ -321,18 +455,40 @@ async def _run_agent(
             openai_api_key=OPENAI_API_KEY,
         )
 
-        # Connect to each server individually — skip any that fail so one
-        # unreachable server never silences the rest.
+        # Build tools from cached registry schemas where available — connects to a
+        # domain's live MCP server ONLY when the LLM actually invokes one of its tools,
+        # not eagerly for every RBAC-permitted domain regardless of relevance to the
+        # question. Falls back to the old eager connect for any domain without a cached
+        # schema yet (static-fallback mode, or not re-registered since this feature landed).
         tools: list = []
-        servers_called = []
+        servers_called: list[str] = []
+        domain_tools_cache: dict[str, list] = {}
+        registry_token: str | None = None
         for domain, cfg in server_config.items():
-            try:
-                single_client = MultiServerMCPClient({domain: cfg})
-                domain_tools = await single_client.get_tools()
-                tools.extend(domain_tools)
-                servers_called.append(domain)
-            except Exception as e:
-                logger.warning("Skipping %s — could not get tools: %s", domain, e)
+            mcp_cfg = {k: v for k, v in cfg.items() if k != "server_id"}
+            server_id = cfg.get("server_id")
+            cached_specs: list[dict] = []
+            if server_id:
+                try:
+                    registry_token = registry_token or _registry_service_token()
+                    cached_specs = fetch_cached_tools(server_id, registry_token)
+                except Exception as e:
+                    logger.warning("No cached tool specs for %s (%s) — falling back to eager connect",
+                                   domain, e)
+
+            if cached_specs:
+                for spec in cached_specs:
+                    tools.append(_build_lazy_tool(domain, mcp_cfg, spec, servers_called,
+                                                   domain_tools_cache))
+            else:
+                try:
+                    single_client = MultiServerMCPClient({domain: mcp_cfg})
+                    domain_tools = await single_client.get_tools()
+                    tools.extend(domain_tools)
+                    if domain not in servers_called:
+                        servers_called.append(domain)
+                except Exception as e:
+                    logger.warning("Skipping %s — could not get tools: %s", domain, e)
 
         if not tools:
             return (
@@ -348,13 +504,34 @@ async def _run_agent(
 
         result = await agent.ainvoke(
             {"messages": [("human", full_question)]},
+            config={"recursion_limit": 25},
         )
         messages = result.get("messages", [])
         if messages:
             return messages[-1].content, servers_called
         return "No answer could be synthesized.", servers_called
 
+    except GraphRecursionError:
+        # The ReAct loop couldn't reach a final answer within its step budget — most often
+        # because the question asks about data outside the caller's RBAC-filtered tools.
+        # Degrade gracefully instead of crashing the request with a 503.
+        logger.warning("Recursion limit hit for servers_called=%s", servers_called)
+        return (
+            "I couldn't finish synthesizing a complete answer within the available step budget. "
+            "This usually means the question asks about data outside what your role can access, "
+            "or the question spans too many domains at once. Try a narrower question, or one "
+            "domain at a time.",
+            servers_called,
+        )
     except BaseException as exc:
+        err = str(exc)
+        if "context_length_exceeded" in err:
+            logger.warning("Context limit exceeded — suggest narrower question")
+            return (
+                "The clinical data for this patient is too large to synthesize in one pass. "
+                "Try a narrower question (e.g. vitals only, meds only, or latest labs).",
+                servers_called,
+            )
         logger.error("Agent error: %s", exc, exc_info=True)
         raise RuntimeError(str(exc)) from exc
 
@@ -405,19 +582,27 @@ async def ask_question(
     # --- resolve patient alias → UUID ---
     patient_uuid = resolve_patient_id(request.patient_id)
 
+    # One trace_id for this whole question — forwarded to every MCP server call so
+    # the audit trail (and Jaeger) can correlate all of them to a single /ask.
+    trace_id = telemetry.extract_trace_id({})
+
     try:
-        answer, servers_called = await _run_agent(
-            question=request.question,
-            patient_uuid=patient_uuid,
-            purpose=purpose,
-            token=token,
-        )
+        with telemetry.span("runtime_agent.ask", trace_id,
+                             patient_uuid=patient_uuid, purpose=purpose):
+            answer, servers_called = await _run_agent(
+                question=request.question,
+                patient_uuid=patient_uuid,
+                purpose=purpose,
+                token=token,
+                trace_id=trace_id,
+            )
         return AskResponse(
             answer=answer,
             patient_id=request.patient_id,
             patient_uuid=patient_uuid,
             purpose_of_access=purpose,
             servers_called=servers_called,
+            servers_available=_available_domains_for_token(token),
         )
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
