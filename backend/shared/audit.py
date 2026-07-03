@@ -36,7 +36,9 @@ def audit_phi(tool_name: str, patient_id: str, outcome: str = "allowed",
     purpose = ctx.purpose_of_access if ctx else DEFAULT_PURPOSE
     trace_id = ctx.trace_id if ctx else None
     who = str(ctx.claims.get("sub") or "anonymous") if ctx and ctx.claims else "anonymous"
-    return log_call(who, f"{tool_name}:{patient_id}", outcome, reason, purpose, trace_id)
+    server_name = ctx.service if ctx else None
+    return log_call(who, f"{tool_name}:{patient_id}", outcome, reason, purpose, trace_id,
+                     server_name=server_name)
 
 
 import os

@@ -107,17 +107,19 @@ class FixedCoreGuard:
         trusted, trust_reason = tool_trust.verify_kong_origin(headers)
         if not trusted:
             usage_log.record("unknown", self.service, "denied")
-            log_call("unknown", f"{self.service}:auth", "denied", trust_reason, purpose, trace_id)
-            await _json_response(send, 403, {
-                "error": {"code": "forbidden", "reason": trust_reason},
-            })
+            log_call("unknown", f"{self.service}:auth", "denied", trust_reason, purpose, trace_id,
+                      server_name=self.service)
+            with telemetry.span(f"{self.service}.denied", trace_id, outcome="403", reason=trust_reason):
+                await _json_response(send, 403, {
+                    "error": {"code": "forbidden", "reason": trust_reason},
+                })
             return
 
         auth = headers.get("authorization", "")
 
         if not auth.lower().startswith("bearer "):
             if ALLOW_ANONYMOUS:
-                set_context(None, purpose, trace_id)
+                set_context(None, purpose, trace_id, self.service)
                 try:
                     with telemetry.span(f"{self.service}.request", trace_id, role="anonymous"):
                         await self.app(scope, receive, send)
@@ -126,13 +128,15 @@ class FixedCoreGuard:
                 return
             usage_log.record("anonymous", self.service, "denied")
             log_call("anonymous", f"{self.service}:auth", "denied",
-                     "missing bearer token", purpose, trace_id)
-            await _json_response(send, 401, {
-                "error": {
-                    "code": "unauthorized",
-                    "reason": "Missing or malformed Authorization header — expected 'Bearer <token>'",
-                },
-            })
+                     "missing bearer token", purpose, trace_id, server_name=self.service)
+            with telemetry.span(f"{self.service}.denied", trace_id, outcome="401",
+                                 reason="missing bearer token"):
+                await _json_response(send, 401, {
+                    "error": {
+                        "code": "unauthorized",
+                        "reason": "Missing or malformed Authorization header — expected 'Bearer <token>'",
+                    },
+                })
             return
 
         token = auth[7:].strip()
@@ -140,10 +144,12 @@ class FixedCoreGuard:
             claims = verify_token(token)
         except jwt.PyJWTError as exc:
             usage_log.record("unknown", self.service, "denied")
-            log_call("unknown", f"{self.service}:auth", "denied", str(exc), purpose, trace_id)
-            await _json_response(send, 401, {
-                "error": {"code": "unauthorized", "reason": str(exc)},
-            })
+            log_call("unknown", f"{self.service}:auth", "denied", str(exc), purpose, trace_id,
+                      server_name=self.service)
+            with telemetry.span(f"{self.service}.denied", trace_id, outcome="401", reason=str(exc)):
+                await _json_response(send, 401, {
+                    "error": {"code": "unauthorized", "reason": str(exc)},
+                })
             return
 
         who = str(claims.get("sub") or "unknown")
@@ -151,15 +157,19 @@ class FixedCoreGuard:
         ok, reason = evaluate(claims, self.required_scope, self.allowed_groups, self.service)
         if not ok:
             usage_log.record(role, self.service, "denied")
-            log_call(who, f"{self.service}:auth", "denied", reason, purpose, trace_id)
-            await _json_response(send, 403, {
-                "error": {"code": "forbidden", "reason": reason},
-            })
+            log_call(who, f"{self.service}:auth", "denied", reason, purpose, trace_id,
+                      server_name=self.service)
+            with telemetry.span(f"{self.service}.denied", trace_id, outcome="403", reason=reason,
+                                 role=role, who=who):
+                await _json_response(send, 403, {
+                    "error": {"code": "forbidden", "reason": reason},
+                })
             return
 
         usage_log.record(role, self.service, "allowed")
-        log_call(who, f"{self.service}:auth", "allowed", None, purpose, trace_id)
-        set_context(claims, purpose, trace_id)
+        log_call(who, f"{self.service}:auth", "allowed", None, purpose, trace_id,
+                  server_name=self.service)
+        set_context(claims, purpose, trace_id, self.service)
         try:
             with telemetry.span(f"{self.service}.request", trace_id, role=role, who=who):
                 await self.app(scope, receive, send)
