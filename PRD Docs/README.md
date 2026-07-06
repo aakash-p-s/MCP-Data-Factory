@@ -51,8 +51,7 @@ Aligned with **PersonA PRD** + **Codebase PRD §5–7** and [`Person_A_Tasks.xls
 | Runtime agent `:8500`, frontend `:3000` | Done — `agent/` + `frontend/` |
 | Onboarding agent (CLI) | Done |
 
-**Repo:** https://github.com/aakash-p-s/MCP-Data-Factory — also mirrored at
-https://github.com/rathibhavna257-stack/MCP_Server (`main` + `person-a/phase-2`).
+**Repo:** https://github.com/aakash-p-s/MCP-Data-Factory (`main` + `person-a/phase-2`).
 
 ### Jul 9 demo — complete
 
