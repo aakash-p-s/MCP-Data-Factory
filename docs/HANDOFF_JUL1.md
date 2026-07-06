@@ -1,6 +1,11 @@
 # Handoff — Jul 1, 2026 (Person A → Person B)
 
-Short summary of what landed on **`person-a/phase-2`** today, what was tested live, and what Person B builds next.
+> **Update (Jul 6, 2026):** Person B delivery is **complete**. Frontend (`/chat`, `/dashboard`),
+> runtime agent, registry integration, and end-to-end QA are verified. See
+> [`troubleshooting.md`](troubleshooting.md) and [`PERSON_B_FRONTEND.md`](PERSON_B_FRONTEND.md).
+
+Short summary of what landed on **`person-a/phase-2`**, what was tested live, and what Person B
+delivered after this handoff.
 
 **Runbook:** [`QUICK_TEST.md`](QUICK_TEST.md) · **Frontend spec:** [`PERSON_B_FRONTEND.md`](PERSON_B_FRONTEND.md) · **Bridge detail:** [`ONBOARDING_RUNTIME_BRIDGE.md`](ONBOARDING_RUNTIME_BRIDGE.md)
 
@@ -89,26 +94,26 @@ The factory bridge was built before today; today's work hardened and documented 
 
 ---
 
-## Person B — tasks now
+## Person B — completed (Jul 6, 2026)
 
-### Priority 1 — Frontend (main gap)
+### Frontend + platform integration
 
-| # | Task | Doc |
+| # | Task | Status |
 | --- | --- | --- |
-| 1 | Run sync checklist | [`PERSON_B_SYNC.md`](PERSON_B_SYNC.md) |
-| 2 | Build `frontend/` — Next.js + NextAuth + CopilotKit | [`PERSON_B_FRONTEND.md`](PERSON_B_FRONTEND.md) |
-| 3 | `/chat` → `POST :8500/ask` (clinician JWT + `purpose_of_access`) | Same |
-| 4 | `/dashboard` → `GET :8600/servers` | Same |
-| 5 | Anomaly panel → `GET :8600/audit` | Same |
-| 6 | `docker compose --profile full` → frontend `:3000` | [`INFRASTRUCTURE.md`](INFRASTRUCTURE.md) |
+| 1 | Sync checklist | Done — [`PERSON_B_SYNC.md`](PERSON_B_SYNC.md) |
+| 2 | `frontend/` — Next.js + NextAuth + CopilotKit | Done |
+| 3 | `/chat` → `POST :8500/ask` | Done |
+| 4 | `/dashboard` → `GET :8600/servers` | Done |
+| 5 | Anomaly panel → `GET :8600/audit` | Done |
+| 6 | `docker compose --profile full` → frontend `:3000` | Done |
 
-### Priority 2 — Optional platform
+### Optional enhancements (not blocking)
 
 | Task | Notes |
 | --- | --- |
-| Kong route for `radiology_reports` | Manual edit `infra/kong/kong.yml` |
-| Keycloak scope `mcp.radiology.read` | If MCP traffic goes via Kong |
-| Web onboarding approval UI | CLI works; optional CopilotKit card |
+| Kong route for `radiology_reports` | Manual edit `infra/kong/kong.yml` when routing via Kong |
+| Keycloak scope `mcp.radiology.read` | Only needed if MCP traffic goes via Kong |
+| Web onboarding approval UI | CLI works; CopilotKit card is optional |
 | CI/CD | Automate `generate` → `register` → deploy |
 
 ---
@@ -131,4 +136,5 @@ Then follow [`QUICK_TEST.md`](QUICK_TEST.md) §6–§7.
 
 ## One-line summary
 
-> Onboarding → generate → register → discovery → `/ask` is done for 5 domains (labs + radiology tested live). Person B owns the clinician frontend and optional Kong/radiology route — not the backend factory.
+> Onboarding → generate → register → discovery → `/ask` → clinician UI is **complete** for 5
+> domains. Full stack verified Jul 6, 2026 (see [`troubleshooting.md`](troubleshooting.md)).

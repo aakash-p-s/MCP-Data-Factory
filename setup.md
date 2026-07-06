@@ -1,6 +1,9 @@
 # Patient Risk Intelligence MCP Platform
 ## Setup Guide — Person B (Platform & Agent Engineer)
 
+> **Status (Jul 6, 2026):** Full platform delivery complete. This guide remains the
+> step-by-step setup reference for fresh machines.
+
 ---
 
 # SECTION 1 — First Time Setup

@@ -128,17 +128,17 @@ Browser
 **The browser NEVER calls Kong or MCP servers directly.**
 Only `agent :8500` and `registry-api :8600` are called from browser code.
 
-## Acceptance checklist
+## Acceptance checklist (verified Jul 6, 2026)
 
-- [ ] NextAuth login works at http://localhost:3000
-- [ ] `/chat` sends POST /ask with Bearer token + purpose_of_access
-- [ ] Physician gets a cited 5-server answer for demo-patient-1
-- [ ] Nurse sees partial answer (meds/notes denied gracefully)
-- [ ] `/dashboard` shows 5 server rows, all healthy
-- [ ] KPI cards show counts
-- [ ] Anomaly panel shows heuristics (populate by making a few /ask calls first)
-- [ ] Trace IDs link to Jaeger
-- [ ] `docker compose --profile full up -d` brings everything up
+- [x] NextAuth login works at http://localhost:3000
+- [x] `/chat` sends POST /ask with Bearer token + purpose_of_access
+- [x] Physician gets a cited 5-server answer for demo-patient-1
+- [x] Nurse sees partial answer (meds/notes denied gracefully)
+- [x] `/dashboard` shows 5 server rows, all healthy
+- [x] KPI cards show counts
+- [x] Anomaly panel shows heuristics (populate by making a few /ask calls first)
+- [x] Trace IDs link to Jaeger
+- [x] `docker compose --profile full up -d` brings everything up
 
 ## Troubleshooting
 

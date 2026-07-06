@@ -93,9 +93,10 @@ flowchart TB
 - ✅ Self-healing connectors (tenacity)
 - ✅ Two connector types proving source-agnostic design (SQL + Vector)
 - ✅ Deterministic Synthea pipeline (v4.0.0, 31 patients, notes → Qdrant)
-- ✅ RBAC matrix enforced + tested (62 pytest) · unified `docker-compose.yml` · docs + scripts
-- ◻️ Open (Jul 9 only): live demo support + optional modules (`telemetry`, `tool_trust`, `usage_log`, `fhir_shape`)
+- ✅ RBAC matrix enforced + tested (77+ pytest) · unified `docker-compose.yml` · docs + scripts
+- ✅ Person B complete: runtime agent, frontend, registry integration, LangSmith tracing
+- ✅ Integrated live demo verified Jul 6, 2026
 
 **In one line:** one hardened, tamper-proof blueprint → four independently-governed clinics →
-two storeroom types → one standard form → two checkpoints → proven safe with 62 bench tests
-plus live walkthroughs before handing the keys to Person B.
+two storeroom types → one standard form → two checkpoints → full platform with clinician UI,
+proven safe with 77+ bench tests plus live walkthroughs.

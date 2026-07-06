@@ -7,7 +7,8 @@ server package and **`register.py`** records it in registry-db so the **runtime 
 discover it when `REGISTRY_DISCOVERY=true`.
 
 **Status:** pipeline + CLI **done**; factory bridge (`generate`, `register`) + runtime
-discovery **done**; frontend approval UI still pending.
+discovery **done**; frontend **done** (Jul 6, 2026). Onboarding approval uses the CLI;
+a web `ApprovalCard` UI is an optional enhancement.
 
 Companion: [`ONBOARDING_RUNTIME_BRIDGE.md`](ONBOARDING_RUNTIME_BRIDGE.md) (connections +
 testing), [`backend/onboarding_agent/README_CLI_TESTING.md`](../backend/onboarding_agent/README_CLI_TESTING.md),

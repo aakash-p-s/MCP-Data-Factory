@@ -1,9 +1,9 @@
-# Person B — Sync Checklist (do this BEFORE building agents / frontend)
+# Person B — Sync Checklist
 
-> **Person A status (Jun 28, 2026):** Sprint **complete** — 4 MCP servers, Fixed Core, 62 tests,
-> pushed to https://github.com/aakash-p-s/MCP-Data-Factory (`main` + `person-a/phase-2`).
-> Person A keeps `docker compose up -d` + `bash scripts/start_mcp_servers.sh` running during
-> your integration. Jul 9 = integrated demo; Person A on support only.
+> **Status (Jul 6, 2026):** Person A **and** Person B sprints are **complete**. Full stack
+> verified end-to-end — frontend, runtime agent, registry, Kong, Keycloak, 5 MCP servers.
+> This checklist remains as a reference for fresh clones. See [`troubleshooting.md`](troubleshooting.md)
+> for the QA pass log.
 
 Person A pushed integration fixes + **four DB-backed MCP servers** (all live on :8001–8004).
 Sync first or you'll build against stale state. Companion docs: [`HANDOVER_PERSON_B.md`](HANDOVER_PERSON_B.md) (contract),
@@ -24,7 +24,7 @@ flowchart LR
         P0 --> P1 --> P2 --> P3 --> P4
     end
 
-    subgraph BUILD["Then build — Person B"]
+    subgraph BUILD["Person B — complete"]
         B1[Keycloak scp + groups]
         B2[Kong upstreams]
         B3[runtime agent :8500]
@@ -161,14 +161,12 @@ All four MCP servers are live. Register all 4 in `registry-db`.
 
 ---
 
-## Then start YOUR build tasks (Person B PRD / tracker)
+## Person B build tasks — complete (Jul 6, 2026)
 
-Person A is done — your work starts here:
-
-- [ ] **Keycloak** — `scp` + `groups[]` mappers; flip `AUTH_VERIFY_SIGNATURE=true`
-- [ ] **Kong** — verify all 4 routes → `host.docker.internal:8001–8004`
-- [ ] **Runtime agent** — LangGraph + 4 MCP clients via Kong URLs (`:8500`)
-- [ ] **Frontend** — Next.js + CopilotKit + NextAuth (`:3000`) — see [`PERSON_B_FRONTEND.md`](PERSON_B_FRONTEND.md)
-- [ ] **Jul 3** — CopilotKit chat + OTel/Jaeger; CHECKPOINT
-- [x] **Jul 8** — unified `docker-compose.yml` (Person A merged)
-- [ ] **Jul 9** — integrated live demo (Person A keeps MCP servers up)
+- [x] **Keycloak** — `scp` + `groups[]` mappers; `AUTH_VERIFY_SIGNATURE=true`
+- [x] **Kong** — all routes → `host.docker.internal:8001–8005`
+- [x] **Runtime agent** — LangGraph + MCP clients (`:8500`)
+- [x] **Frontend** — Next.js + CopilotKit + NextAuth (`:3000`) — see [`PERSON_B_FRONTEND.md`](PERSON_B_FRONTEND.md)
+- [x] **Jul 3** — CopilotKit chat + OTel/Jaeger
+- [x] **Jul 8** — unified `docker-compose.yml`
+- [x] **Jul 9** — integrated live demo verified

@@ -184,9 +184,9 @@ python3 -c "import json; print(json.load(open('infra/synthea/demo_patient_aliase
 
 ## MCP Servers
 
-Three SQL-backed servers are live; the vector server ships Jul 6. Each contract is **fixed**
-(see `blueprint.yaml` in each server directory). Integration checklist for Person B:
-[`HANDOVER_PERSON_B.md`](../docs/HANDOVER_PERSON_B.md).
+Four SQL-backed servers + one vector server + radiology demo are live. Each contract is
+**fixed** (see `blueprint.yaml` in each server directory). Full platform integration
+(Person A + Person B) is **complete** — see [`HANDOVER_PERSON_B.md`](../docs/HANDOVER_PERSON_B.md).
 
 ```bash
 uv run python backend/servers/vitals_trends/main.py              # -> :8001/mcp

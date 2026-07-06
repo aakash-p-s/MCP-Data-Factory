@@ -92,7 +92,7 @@ MCP-Data-Factory/
 │   ├── Dockerfile
 │   └── README.md
 │
-├── frontend/                          # pending — Next.js + CopilotKit + NextAuth
+├── frontend/                          # Next.js + CopilotKit + NextAuth (chat + dashboard)
 │
 ├── docs/                              # living documentation (see index below)
 └── PRD Docs/                          # original PDF requirements
@@ -109,7 +109,7 @@ MCP-Data-Factory/
 | `backend/onboarding_agent/` | Build-time factory: schema → blueprint → server → registry |
 | `backend/registry/` | Control-plane API backed by `registry-db` |
 | `agent/` | Runtime agent — calls MCP servers, synthesizes cited clinical answers |
-| `frontend/` | Clinician UI — chat, dashboard, anomaly panel *(not built yet)* |
+| `frontend/` | Clinician UI — chat, dashboard, anomaly panel |
 | `scripts/` | Start servers, smoke tests, pre-push verification |
 
 ---
@@ -218,7 +218,7 @@ The runtime agent resolves aliases automatically.
 
 | Service | Port | URL |
 | --- | --- | --- |
-| Frontend | 3000 | http://localhost:3000 *(pending)* |
+| Frontend | 3000 | http://localhost:3000 |
 | Runtime agent | 8500 | http://localhost:8500/ask |
 | Kong proxy | 8000 | http://localhost:8000 |
 | Kong admin | 8101 | http://localhost:8101 |
@@ -245,8 +245,9 @@ The runtime agent resolves aliases automatically.
 | Onboarding agent (CLI + factory bridge) | Done |
 | Runtime agent (`POST /ask`, registry discovery) | Done |
 | `radiology_reports` demo domain (:8005) | Done (generated scaffold) |
-| Frontend (chat + dashboard + anomaly panel) | **Pending** |
-| Kong auto-provisioning for new domains | Manual (`kong.yml` edit) |
+| Frontend (chat + dashboard + anomaly panel) | Done |
+| Person B platform integration | Done |
+| Kong auto-provisioning for new domains | Manual (`kong.yml` edit) — optional enhancement |
 
 **Tests:** 77+ pytest · MCP Inspector 4/4 · pre-push verify 14/14
 
@@ -261,7 +262,7 @@ The runtime agent resolves aliases automatically.
 | [`docs/INFRASTRUCTURE.md`](docs/INFRASTRUCTURE.md) | Docker services, Kong, Keycloak |
 | [`docs/ONBOARDING_AGENT.md`](docs/ONBOARDING_AGENT.md) | Build-time onboarding pipeline |
 | [`docs/ONBOARDING_RUNTIME_BRIDGE.md`](docs/ONBOARDING_RUNTIME_BRIDGE.md) | generate → register → discover |
-| [`docs/PERSON_B_FRONTEND.md`](docs/PERSON_B_FRONTEND.md) | Frontend build spec (pending) |
+| [`docs/PERSON_B_FRONTEND.md`](docs/PERSON_B_FRONTEND.md) | Frontend build spec (complete) |
 | [`docs/HANDOVER_PERSON_B.md`](docs/HANDOVER_PERSON_B.md) | Integration contract (routes, scopes, RBAC) |
 | [`docs/DATA_CHECKING.md`](docs/DATA_CHECKING.md) | Browse SQL + Qdrant in the browser |
 | [`docs/CHANGELOG.md`](docs/CHANGELOG.md) | What changed + commands |

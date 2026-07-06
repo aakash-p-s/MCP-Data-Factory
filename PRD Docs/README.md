@@ -33,29 +33,30 @@ Aligned with **PersonA PRD** + **Codebase PRD §5–7** and [`Person_A_Tasks.xls
 | **Embeddings** | Single source in `backend/shared/embeddings.py` + Qdrant fingerprint guard |
 | **Tests** | `test_rbac_matrix.py` (auth engine), `test_rbac_matrix_http.py` (4×3 HTTP matrix), `test_mcp_inspector.py`, `test_fixed_core.py`, `test_self_healing.py`, `test_clinical_notes_search.py`, `test_telemetry.py`, `test_tool_trust.py`, `test_usage_log.py` — **77 pytest passing**; `scripts/mcp_inspector_smoke.py --in-process` (4/4 servers) |
 
-### Partial / open
+### Partial / known limitations (non-blocking)
 
-| PRD area | Gap |
+| PRD area | Notes |
 | --- | --- |
 | **`fhir_shape.py`** | FHIR R4 shaping done inline in each `tools.py` (no shared module — functionally complete) |
-| **Docker auto-restart** | `restart: unless-stopped` set, but a hard `docker kill` did not auto-restart the DB locally; in-process connector self-healing still recovered the call |
-| **Jul 9 demo** | Final fixes + live demo support |
+| **Docker auto-restart** | `restart: unless-stopped` set; hard `docker kill` may not auto-restart DB locally; in-process self-healing still recovers |
+| **Kong auto-provisioning** | Manual `kong.yml` edit per new domain |
+| **Sidebar health dots** | Registry API / Kong Gateway lights in chat sidebar are cosmetic (see [`troubleshooting.md`](../docs/troubleshooting.md) #10) |
 
-### Person B (not Person A — builds next)
+### Person B — complete (Jul 6, 2026)
 
-| Person B delivers | See |
+| Person B delivers | Status |
 | --- | --- |
-| Keycloak `scp`/`groups[]` mappers, real JWTs | [`docs/PERSON_B_SYNC.md`](../docs/PERSON_B_SYNC.md) §6 |
-| Kong → `:8001–8004` upstreams | [`docs/HANDOVER_PERSON_B.md`](../docs/HANDOVER_PERSON_B.md) |
-| Runtime agent `:8500`, frontend `:3000` | Person B PRD; `agent/` + `frontend/` dirs TBD |
-| Onboarding agent | Later sprint |
+| Keycloak `scp`/`groups[]` mappers, real JWTs | Done |
+| Kong → `:8001–8005` upstreams | Done |
+| Runtime agent `:8500`, frontend `:3000` | Done — `agent/` + `frontend/` |
+| Onboarding agent (CLI) | Done |
 
-**Repo:** https://github.com/aakash-p-s/MCP-Data-Factory — branch `person-a/phase-2` and `main` (merged Jun 28, 2026).
+**Repo:** https://github.com/aakash-p-s/MCP-Data-Factory — also mirrored at
+https://github.com/rathibhavna257-stack/MCP_Server (`main` + `person-a/phase-2`).
 
-### Jul 9 (Person A — support only)
+### Jul 9 demo — complete
 
-Live demo support: keep `docker compose up -d` + `bash scripts/start_mcp_servers.sh` running;
-fix integration bugs; no new scope unless agreed.
+Integrated live demo verified Jul 6, 2026. See [`docs/troubleshooting.md`](../docs/troubleshooting.md).
 
 ---
 

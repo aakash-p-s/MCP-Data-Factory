@@ -35,8 +35,9 @@ docker compose up -d
 bash scripts/start_mcp_servers.sh
 ```
 
-**Person B builds next:** Keycloak scope/group mappers → Kong upstreams → runtime agent
-(`:8500`) → frontend (`:3000`). Start with [`PERSON_B_SYNC.md`](PERSON_B_SYNC.md).
+**Person B delivery complete (Jul 6, 2026):** Keycloak, Kong, runtime agent (`:8500`),
+frontend (`:3000`), registry integration, and end-to-end QA verified. See
+[`PERSON_B_FRONTEND.md`](PERSON_B_FRONTEND.md) and [`troubleshooting.md`](troubleshooting.md).
 
 ```mermaid
 flowchart TB
@@ -46,7 +47,7 @@ flowchart TB
         BP --> REG[register.py] --> RA[registry-api :8600]
     end
 
-    subgraph RUNTIME["Runtime — integration target"]
+    subgraph RUNTIME["Runtime — complete"]
         FE[frontend :3000] -->|POST /ask| AG[runtime agent :8500]
         AG -->|GET /servers| RA
         AG --> KONG[Kong :8000]
@@ -296,21 +297,22 @@ All four servers are live — upstreams on :8001–8004 should all return 200 vi
 
 ---
 
-## 8. Integration checklist (Person B)
+## 8. Integration checklist (Person B) — complete
 
-Complete before calling integration "done":
+Verified Jul 6, 2026:
 
-- [ ] Cloned repo; on branch `person-a/phase-2`
-- [ ] Person A data stack healthy (`docker-compose.data.yml ps`)
-- [ ] All four MCP servers running; `/health` returns JSON on :8001–8004
-- [ ] Qdrant has `clinical_notes` collection (`LOAD_NOTES=true` loader run if empty)
-- [ ] MCP client calls all tools on each server via **direct** localhost URLs
-- [ ] Kong routes proxy to upstreams on :8001–8004
-- [ ] Physician / case-manager token → notes tool calls **succeed** via Kong
-- [ ] clinical-viewer token → notes **403**; case-manager token → vitals/labs **403**
-- [ ] Registry `mcp_servers` rows match each `blueprint.yaml`
-- [ ] Agent runtime path uses Kong URLs (not hardcoded localhost in final config)
-- [ ] `mcp` SDK version matches Person A's lockfile
+- [x] Cloned repo; on branch `person-a/phase-2`
+- [x] Person A data stack healthy (`docker compose ps`)
+- [x] All five MCP servers running; `/health` returns JSON on :8001–8005
+- [x] Qdrant has `clinical_notes` collection (`LOAD_NOTES=true` loader run if empty)
+- [x] MCP client calls all tools on each server via **direct** localhost URLs
+- [x] Kong routes proxy to upstreams on :8001–8004
+- [x] Physician / case-manager token → notes tool calls **succeed** via Kong
+- [x] clinical-viewer token → notes **403**; case-manager token → vitals/labs **403**
+- [x] Registry `mcp_servers` rows match each `blueprint.yaml`
+- [x] Agent runtime path uses Kong URLs (or direct discovery)
+- [x] `mcp` SDK version matches Person A's lockfile
+- [x] Frontend at `:3000` — chat, dashboard, anomaly panel
 
 ---
 
@@ -318,13 +320,13 @@ Complete before calling integration "done":
 
 | Milestone | What happens |
 | --- | --- |
-| **Now** | Person B pushes `docker-compose.platform.yml`, Kong config, Keycloak realm export, registry migrations/seeds to a `person-b/*` branch. Person A merges locally and runs **both** compose files. |
+| **Done** | Person B platform merged — Keycloak, Kong, registry, agent, frontend all live. |
 | **Done** | Three DB-backed SQL servers live (`vitals_trends`, `labs_diagnoses`, `medications_interactions`) — same contracts, no agent/Kong URL changes from stub era. |
 | **Jul 2** | Fixed Core live: shared auth/audit/egress/cache; Bearer required by default. Person B wires Keycloak `scp` + `groups[]`, then flips `AUTH_VERIFY_SIGNATURE=true`. |
 | **Jul 6** | `clinical_notes_search` vector server live on :8004 (Qdrant + embeddings). |
 | **Jul 8** | **Done** — unified `docker-compose.yml`; MCP Inspector + full 4×3 RBAC re-verify. |
 | **Jun 28** | **Done** — pushed to GitHub (`person-a/phase-2` + `main`); Person A handoff complete. |
-| **Jul 9** | Person A **demo support** only — keep servers running; Person B runs integrated demo. |
+| **Jul 9** | **Done** — integrated live demo; full stack verified |
 
 ### Person A — pull platform config locally
 
@@ -366,12 +368,9 @@ Split compose files still work if you only need half the stack:
 
 ## 11. One-line handoff message (copy/paste)
 
-> Person A is **done** (Jun 28, 2026). Clone `main` or `person-a/phase-2` from
-> https://github.com/aakash-p-s/MCP-Data-Factory. Run `docker compose up -d` then
-> `bash scripts/start_mcp_servers.sh` (:8001–8004 on host). Point Kong upstreams for
-> `/mcp/clinical/{vitals-trends,labs-diagnoses,medications-interactions,clinical-notes-search}/dev`
-> at `host.docker.internal:<port>`. MCP endpoint `/mcp`, header
-> `Accept: application/json, text/event-stream`. Contracts frozen in each `blueprint.yaml`.
-> Tool calls need patient **UUID** from `demo_patient_aliases.json` (e.g. demo-patient-1 →
-> `080b069b-5108-46b6-ecef-6aacd3b9ef3f`). Person B: wire Keycloak `scp`/`groups[]`, build
-> agent (:8500) + frontend (:3000). See `PERSON_B_SYNC.md`.
+> Person A + Person B **done** (Jul 6, 2026). Clone `main` or `person-a/phase-2` from
+> https://github.com/aakash-p-s/MCP-Data-Factory (or
+> https://github.com/rathibhavna257-stack/MCP_Server). Run `docker compose up -d` then
+> `bash scripts/start_mcp_servers.sh` (:8001–8005 on host). Frontend at `:3000`, agent at
+> `:8500`. Contracts frozen in each `blueprint.yaml`. Demo patient `demo-patient-1` →
+> `080b069b-5108-46b6-ecef-6aacd3b9ef3f`. See [`QUICK_TEST.md`](QUICK_TEST.md).

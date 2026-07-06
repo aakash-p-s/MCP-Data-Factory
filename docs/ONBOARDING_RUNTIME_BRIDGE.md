@@ -9,7 +9,7 @@ Companion docs:
 - [`ONBOARDING_AGENT.md`](ONBOARDING_AGENT.md) — onboarding pipeline stages
 - [`backend/onboarding_agent/README_CLI_TESTING.md`](../backend/onboarding_agent/README_CLI_TESTING.md) — interactive CLI walkthrough
 - [`HANDOVER_PERSON_B.md`](HANDOVER_PERSON_B.md) — frozen MCP contracts
-- [`PERSON_B_FRONTEND.md`](PERSON_B_FRONTEND.md) — pending frontend (chat + dashboard)
+- [`PERSON_B_FRONTEND.md`](PERSON_B_FRONTEND.md) — frontend (chat + dashboard) — **complete**
 
 ---
 
@@ -436,24 +436,24 @@ backend/servers/radiology_reports/   GENERATED demo server
 
 ---
 
-## Acceptance checklist (bridge "done")
+## Acceptance checklist (bridge "done" — verified)
 
-- [ ] `pytest backend/tests/test_onboarding_agent.py` — 10/10 pass
-- [ ] `main.py <domain>` → approved blueprint on disk
-- [ ] `generate.py` → runnable server under `backend/servers/<domain>/`
-- [ ] Server `/health` returns 200 on assigned port
-- [ ] `register.py` → domain visible in `GET /servers`
-- [ ] `REGISTRY_DISCOVERY=true` → `discover_servers()` includes new domain
-- [ ] `POST /ask` → `servers_called` includes new domain (when RBAC allows)
-- [ ] Audit rows land in `registry-db.audit_events` when `REGISTRY_DB_URL` set on MCP servers
+- [x] `pytest backend/tests/test_onboarding_agent.py` — 10/10 pass
+- [x] `main.py <domain>` → approved blueprint on disk
+- [x] `generate.py` → runnable server under `backend/servers/<domain>/`
+- [x] Server `/health` returns 200 on assigned port
+- [x] `register.py` → domain visible in `GET /servers`
+- [x] `REGISTRY_DISCOVERY=true` → `discover_servers()` includes new domain
+- [x] `POST /ask` → `servers_called` includes new domain (when RBAC allows)
+- [x] Audit rows land in `registry-db.audit_events` when `REGISTRY_DB_URL` set on MCP servers
 
 ---
 
-## What's still Person B / later
+## Optional enhancements (not blocking delivery)
 
 | Item | Notes |
 | --- | --- |
-| Frontend chat/dashboard | See [`PERSON_B_FRONTEND.md`](PERSON_B_FRONTEND.md) |
+| Frontend chat/dashboard | **Done** — see [`PERSON_B_FRONTEND.md`](PERSON_B_FRONTEND.md) |
 | Auto Kong route provisioning | Manual `kong.yml` edit today |
 | `ApprovalCard.tsx` web UI | CLI approval works; CopilotKit card is optional |
 | Production-grade `tools.py` | Specialize generated scaffolds per domain |

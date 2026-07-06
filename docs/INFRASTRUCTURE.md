@@ -24,7 +24,7 @@ Companion: [`MCP_SERVERS.md`](MCP_SERVERS.md) (the servers that sit between Kong
 | **registry-db** | platform | 5435 | control-plane source of truth (12 tables) | `infra/postgres/init-registry-db.sql` |
 | **registry-api** | platform | 8600 | reads/writes registry-db; token-protected | `backend/registry/` |
 | **jaeger** | platform | 16686 | distributed tracing UI | — |
-| *agent, frontend* | platform (`full`) | 8500, 3000 | Person B runtime/UI (dirs not uploaded yet) | — |
+| *agent, frontend* | platform (`full`) | 8500, 3000 | Runtime agent + clinician UI | `agent/`, `frontend/` |
 
 ---
 

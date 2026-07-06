@@ -1,11 +1,12 @@
-# Person B — Frontend Build Guide (Pending)
+# Person B — Frontend Build Guide (Complete)
 
-> **Status:** Not built. Person B owns the entire `frontend/` directory plus wiring it into
-> `docker-compose.platform.yml` (service stub already exists under the `full` profile).
+> **Status:** **Done** (Jul 6, 2026). The `frontend/` directory is built and verified end-to-end
+> against the runtime agent, registry-api, and Keycloak. Wired into `docker-compose.platform.yml`
+> under the `full` profile.
 >
-> **Person A is done** (Jun 28, 2026): four MCP servers, Fixed Core, registry-db schema,
-> audit persistence, 77 pytest. Person B should not change Person A contracts without
-> same-day notice — see [`HANDOVER_PERSON_B.md`](HANDOVER_PERSON_B.md).
+> **Person A + Person B delivery complete:** four MCP servers (+ radiology demo), Fixed Core,
+> registry-db, runtime agent, and clinician UI. See [`troubleshooting.md`](troubleshooting.md)
+> for the QA pass log and [`HANDOVER_PERSON_B.md`](HANDOVER_PERSON_B.md) for frozen contracts.
 
 This document is the build spec for the **three UI surfaces** called out in the PRD:
 
@@ -26,19 +27,17 @@ Companion docs (read these first):
 
 ---
 
-## What Person B has vs what is still pending
-
-### Already in the repo (Person B platform half)
+## Platform deliverables (all complete)
 
 | Deliverable | Location | Port | Status |
 | --- | --- | --- | --- |
-| Keycloak realm | `infra/keycloak/realm-export.json` | 8080 | Done (scope mappers may still need your verification — see sync doc §6) |
-| Kong gateway | `infra/kong/kong.yml` | 8000 | Done (4 routes; add a block per new domain) |
-| Registry DB + API | `backend/registry/` | 8600 | Done |
+| Keycloak realm | `infra/keycloak/realm-export.json` | 8080 | Done |
+| Kong gateway | `infra/kong/kong.yml` | 8000 | Done (5 routes; manual edit per new domain) |
+| Registry DB + API | `backend/registry/` | 8600 | Done (live health polling) |
 | Jaeger | `docker-compose.platform.yml` | 16686 | Done |
-| Runtime agent | `agent/runtime_agent.py` | 8500 | **Partial** — `/ask` works; frontend is the missing consumer |
-| Onboarding agent | `backend/onboarding_agent/` | — | **Partial** — CLI pipeline done; no web UI |
-| **Frontend** | `frontend/` | 3000 | **Not started — this doc** |
+| Runtime agent | `agent/runtime_agent.py` | 8500 | Done — `/ask`, registry discovery, LangSmith |
+| Onboarding agent | `backend/onboarding_agent/` | — | Done — CLI pipeline (`main.py` / `run.py`) |
+| **Frontend** | `frontend/` | 3000 | **Done** — `/chat`, `/dashboard`, anomaly panel |
 
 ### Dependency order (recommended)
 
@@ -457,21 +456,19 @@ your PR / demo script (not committed to git).
 
 ---
 
-## Acceptance checklist (frontend "done")
+## Acceptance checklist (verified Jul 6, 2026)
 
-Copy into your PR description:
-
-- [ ] `frontend/` directory committed with Dockerfile
-- [ ] NextAuth login against Keycloak works at `http://localhost:3000`
-- [ ] `/chat` sends `POST /ask` with Bearer token + valid `purpose_of_access`
-- [ ] Physician user receives a cited multi-domain answer for `demo-patient-1`
-- [ ] Clinical-viewer user sees partial answer (meds/notes denied gracefully)
-- [ ] `/dashboard` renders `RegistryTable` polling `GET /servers`
-- [ ] KPI cards show audit-derived counts (or `/usage` aggregates)
-- [ ] Anomaly panel renders at least 2 heuristics from `GET /audit`
-- [ ] Trace IDs link to Jaeger when present
-- [ ] `docker compose --profile full up -d` brings up frontend + agent
-- [ ] No MCP or Kong URLs exposed in browser network tab — only agent + registry
+- [x] `frontend/` directory committed with Dockerfile
+- [x] NextAuth login against Keycloak works at `http://localhost:3000`
+- [x] `/chat` sends `POST /ask` with Bearer token + valid `purpose_of_access`
+- [x] Physician user receives a cited multi-domain answer for `demo-patient-1`
+- [x] Clinical-viewer user sees partial answer (meds/notes denied gracefully)
+- [x] `/dashboard` renders `RegistryTable` polling `GET /servers`
+- [x] KPI cards show audit-derived counts (or `/usage` aggregates)
+- [x] Anomaly panel renders at least 2 heuristics from `GET /audit`
+- [x] Trace IDs link to Jaeger when present
+- [x] `docker compose --profile full up -d` brings up frontend + agent
+- [x] No MCP or Kong URLs exposed in browser network tab — only agent + registry
 
 ---
 
@@ -487,7 +484,7 @@ Copy into your PR description:
 
 ---
 
-## Quick smoke test (after frontend is built)
+## Quick smoke test
 
 ```bash
 # Terminal 1 — Person A data + servers (if not already running)

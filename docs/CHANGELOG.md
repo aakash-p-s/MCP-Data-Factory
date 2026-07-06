@@ -1,8 +1,29 @@
 # Changelog
 
-Notable changes to the Person A (data + backend) half, newest first. Commands that changed
-for everyone are called out so Person B / other machines can stay in sync. See
-[`PERSON_B_SYNC.md`](PERSON_B_SYNC.md) for the action checklist.
+Notable changes to the platform, newest first. Commands that changed for everyone are
+called out so other machines can stay in sync. See [`PERSON_B_SYNC.md`](PERSON_B_SYNC.md)
+for the sync reference checklist.
+
+---
+
+## 2026-07-06 — Full platform delivery complete (Person A + Person B)
+
+Person B frontend, runtime agent integration, and end-to-end QA verified. All blocking
+work is done.
+
+| Area | Status |
+| --- | --- |
+| Frontend (`/chat`, `/dashboard`, anomaly panel) | Done |
+| Runtime agent + registry discovery | Done |
+| Live health polling on dashboard | Done |
+| LangSmith tracing (`scripts/verify_langsmith.py`) | Done |
+| CORS, agent proxy routes, SSO logout, light theme | Done (`b00ed39`) |
+| Docs updated — no pending deliverables | Done |
+
+**QA log:** [`troubleshooting.md`](troubleshooting.md) (items 1–13, Jul 3 + Jul 6 passes).
+
+**Repos:** https://github.com/aakash-p-s/MCP-Data-Factory ·
+https://github.com/rathibhavna257-stack/MCP_Server
 
 ---
 
@@ -267,9 +288,9 @@ AUTH_ALLOW_ANONYMOUS=false    # true for local POC without tokens
 Real Keycloak token → Kong (signature OK) → stub/real server → `get_vitals_trend` returns a
 FHIR `Observation` (HTTP 200).
 
-### Still open (not Person A code)
-- Keycloak must issue tokens with `mcp.vitals.read` in the **`scp`** claim before Jul 2 RBAC
-  (Person B — see [`PERSON_B_SYNC.md`](PERSON_B_SYNC.md) §5).
+### Platform integration complete
+Keycloak `scp`/`groups[]` mappers, Kong upstreams, runtime agent, and frontend are live.
+See [`PERSON_B_SYNC.md`](PERSON_B_SYNC.md) and [`troubleshooting.md`](troubleshooting.md).
 
 ---
 
