@@ -50,7 +50,7 @@ Thumbs.db
 .vscode/
 *.swp
 *.swo
-
+.claude/
 # Logs
 *.log
 

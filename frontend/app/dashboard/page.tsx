@@ -165,7 +165,7 @@ function AccessOverview({ events }: { events: AuditEvent[] }) {
           const total = allowed + denied;
           const heightPct = (total / maxVal) * 100;
           return (
-            <div key={d.date} className="flex-1 flex flex-col items-center gap-1" title={`${d.label}: ${allowed} allowed, ${denied} denied`}>
+            <div key={d.date} className="flex-1 flex flex-col items-center justify-end gap-1 h-full" title={`${d.label}: ${allowed} allowed, ${denied} denied`}>
               <div className="w-full flex flex-col-reverse rounded-t overflow-hidden" style={{ height: `${Math.max(heightPct, 4)}%`, maxHeight: "80px", minHeight: "4px" }}>
                 {denied > 0 && <div className="bg-red-500/70" style={{ height: `${(denied / Math.max(total, 1)) * 100}%` }} />}
                 {allowed > 0 && <div className="bg-blue-500/70" style={{ height: `${(allowed / Math.max(total, 1)) * 100}%` }} />}
@@ -267,22 +267,13 @@ export default function DashboardPage() {
             . Sign out and sign back in if this persists.
           </div>
         )}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-          <KpiCard
-            title="Total PHI Touches"
-            value={phiTouches.toLocaleString()}
-            sub="vs last 24 hours"
-            icon="📊"
-            color="bg-blue-600/20"
-            trend={phiTouches > 0 ? "+18.6%" : undefined}
-          />
+        <div className="grid grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
           <KpiCard
             title="Access Denials (403)"
             value={denials}
             sub="vs last 24 hours"
             icon="🚫"
             color="bg-red-600/20"
-            trend={denials > 0 ? `-12.5%` : undefined}
           />
           <KpiCard
             title="Questions by Purpose"
