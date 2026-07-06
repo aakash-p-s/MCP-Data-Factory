@@ -343,6 +343,25 @@ def _pydantic_model_from_schema(tool_name: str, schema: dict):
     return create_model(f"{tool_name}_Args", **fields)
 
 
+def _wrap_tool_for_tracking(tool, domain: str, servers_called: list[str]):
+    """Wrap an already-connected MCP tool (no-cached-schema fallback path) so
+    `servers_called` only records `domain` when the LLM actually invokes one of its
+    tools — not merely because a connection was opened to discover its schema."""
+    from langchain_core.tools import StructuredTool
+
+    async def _call(**kwargs):
+        if domain not in servers_called:
+            servers_called.append(domain)
+        return await tool.ainvoke(kwargs)
+
+    return StructuredTool(
+        name=tool.name,
+        description=tool.description,
+        args_schema=tool.args_schema,
+        coroutine=_call,
+    )
+
+
 def _build_lazy_tool(domain: str, mcp_cfg: dict, spec: dict,
                       servers_called: list[str], domain_tools_cache: dict[str, list]):
     """One LangChain StructuredTool per cached spec. Its coroutine opens the real MCP
@@ -484,9 +503,8 @@ async def _run_agent(
                 try:
                     single_client = MultiServerMCPClient({domain: mcp_cfg})
                     domain_tools = await single_client.get_tools()
-                    tools.extend(domain_tools)
-                    if domain not in servers_called:
-                        servers_called.append(domain)
+                    tools.extend(_wrap_tool_for_tracking(t, domain, servers_called)
+                                 for t in domain_tools)
                 except Exception as e:
                     logger.warning("Skipping %s — could not get tools: %s", domain, e)
 

@@ -1,0 +1,72 @@
+**Analysis: Why Both Jaeger AND LangSmith?**
+
+They serve **complementary, non-overlapping purposes**:
+
+---
+
+### **Jaeger** (You're using this)
+**Purpose:** Infrastructure-level distributed tracing across your **entire system**
+
+What it captures:
+- Request flow across all services (`runtime_agent` → `clinical_notes_search` → `labs_diagnoses`, etc.)
+- HTTP latency, network bottlenecks, timeouts
+- Service dependencies and call chains
+- Errors/exceptions at the infrastructure level
+- Full end-to-end trace from user question → agent → MCP servers → response
+
+**In your code:** [agent/runtime_agent.py:42](agent/runtime_agent.py:42) + [backend/shared/telemetry.py:1-75](backend/shared/telemetry.py:1-75)
+- You explicitly configured OpenTelemetry to export to Jaeger (OTEL_EXPORTER_OTLP_ENDPOINT)
+- Each clinical question creates one W3C `traceparent` that flows through all servers
+- Audit log records the `trace_id` so you can click Jaeger link and see "what happened end-to-end"
+
+**Good for:** "Why is this question taking 5 seconds? Which service is slow?"
+
+---
+
+### **LangSmith** (You have it configured, mostly automatic)
+**Purpose:** LLM-specific observability for **AI/agent behavior**
+
+What it captures:
+- Which LLM model was called (gpt-4o) and what tokens were used
+- Which tools the agent invoked and in what order (e.g., `get_active_medications`, then `check_drug_interactions`)
+- Tool inputs/outputs and reasoning chains
+- Agent decision-making at each step
+- Cost per call (token pricing)
+- Quality feedback loops (mark runs good/bad for evaluation)
+- Dataset management for testing/benchmarking
+
+**In your code:** [agent/runtime_agent.py:411-413](agent/runtime_agent.py:411-413)
+- You're using `LangGraph` + `ChatOpenAI` (LangChain libraries)
+- `LANGSMITH_API_KEY` + `LANGSMITH_TRACING=true` in your `.env` automatically enable tracing — **no code changes needed**
+- When the ReAct agent runs, LangSmith SDK invisibly intercepts calls and sends them to their cloud service
+
+**Good for:** "Did the agent make the right tool calls? How many tokens did this cost? Can I see the agent's reasoning?"
+
+---
+
+### **Why Both? Concrete Example**
+
+User asks: _"Summarise patient Chester's medications"_
+
+| Tool | Sees | Helps you understand |
+|------|------|----------------------|
+| **Jaeger** | POST /ask (200ms) → POST clinical_notes_search (50ms) → POST medications_interactions (120ms) → GET registry-api (5ms) | System bottleneck: medications_interactions took 120ms (why?) |
+| **LangSmith** | LLM called gpt-4o, 500→200 tokens. Agent invoked 2 tools: `get_active_medications` (skipped radiology), cost $0.0012 | Agent made the right call (skipped unnecessary tool), cost is good |
+
+**Jaeger answers:** "What took long?"  
+**LangSmith answers:** "Did the AI do the right thing? What did it cost?"
+
+---
+
+### **Your Current Setup**
+
+✅ **Jaeger:** Explicitly configured + actively logging traces  
+✅ **LangSmith:** Configured in `.env` + automatic (set-and-forget via LangChain SDK)
+
+You're not "using" LangSmith in the sense of explicit API calls in your code — you just set `LANGSMITH_API_KEY=lsv2_...` and `LANGSMITH_TRACING=true`, and LangChain's internals handle the rest. It's silent/transparent.
+
+---
+
+**TL;DR:** Not redundant — complementary.  
+- **Jaeger** = "What's slow in my infrastructure?"  
+- **LangSmith** = "Did my AI make good decisions and what did it cost?"
