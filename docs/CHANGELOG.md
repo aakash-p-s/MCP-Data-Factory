@@ -22,8 +22,7 @@ work is done.
 
 **QA log:** [`troubleshooting.md`](troubleshooting.md) (items 1–13, Jul 3 + Jul 6 passes).
 
-**Repos:** https://github.com/aakash-p-s/MCP-Data-Factory ·
-https://github.com/rathibhavna257-stack/MCP_Server
+**Repo:** https://github.com/aakash-p-s/MCP-Data-Factory
 
 ---
 

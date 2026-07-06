@@ -369,8 +369,7 @@ Split compose files still work if you only need half the stack:
 ## 11. One-line handoff message (copy/paste)
 
 > Person A + Person B **done** (Jul 6, 2026). Clone `main` or `person-a/phase-2` from
-> https://github.com/aakash-p-s/MCP-Data-Factory (or
-> https://github.com/rathibhavna257-stack/MCP_Server). Run `docker compose up -d` then
+> https://github.com/aakash-p-s/MCP-Data-Factory. Run `docker compose up -d` then
 > `bash scripts/start_mcp_servers.sh` (:8001–8005 on host). Frontend at `:3000`, agent at
 > `:8500`. Contracts frozen in each `blueprint.yaml`. Demo patient `demo-patient-1` →
 > `080b069b-5108-46b6-ecef-6aacd3b9ef3f`. See [`QUICK_TEST.md`](QUICK_TEST.md).
