@@ -275,3 +275,9 @@ The runtime agent resolves aliases automatically.
 
 Python 3.12 · FastAPI · MCP SDK · TimescaleDB · PostgreSQL 16 · Qdrant · Synthea · NEWS2 ·
 Kong · Keycloak · LangGraph · Next.js · CopilotKit · OpenTelemetry · Docker Compose
+
+---
+
+## End To End Flow
+
+![End To End Flow](PRD%20Docs/END%20TO%20END%20FLOW.png)
